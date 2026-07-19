@@ -1,4 +1,4 @@
- // --- Core Engine Framework ---
+// --- Core Engine Framework ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas ? canvas.getContext("2d") : null;
 const speedVal = document.getElementById("speed-val");
@@ -20,7 +20,7 @@ const CAMERA_DEPTH = 0.84;
 let playerX = 0;             
 let position = 0;            
 let speed = 0;               
-const maxSpeed = 12000;      // ~120 MPH cap for realism
+const maxSpeed = 12000;      
 const accel = 180;           
 const breaking = -400;       
 
@@ -59,17 +59,14 @@ function drawRealisticTree(ctx, x, y, scale) {
     let trunkH = 160 * scale;
     let trunkW = 14 * scale;
 
-    // Soft organic shadowing
     ctx.fillStyle = "rgba(10, 15, 10, 0.25)";
     ctx.beginPath();
     ctx.ellipse(x, y, 40 * scale, 10 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Weathered Trunk
     ctx.fillStyle = "#3e2723"; 
     ctx.fillRect(x - trunkW / 2, y - trunkH, trunkW, trunkH);
 
-    // Layered Evergreen Foliage Cone
     ctx.fillStyle = "#1e3f20"; 
     ctx.beginPath();
     ctx.moveTo(x - 55 * scale, y - trunkH * 0.3);
@@ -78,7 +75,7 @@ function drawRealisticTree(ctx, x, y, scale) {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "#152e17"; // Shaded interior canopy layer
+    ctx.fillStyle = "#152e17"; 
     ctx.beginPath();
     ctx.moveTo(x - 40 * scale, y - trunkH * 0.6);
     ctx.lineTo(x + 40 * scale, y - trunkH * 0.6);
@@ -94,21 +91,17 @@ function drawHighwaySign(ctx, x, y, scale, index) {
     let postW = 6 * scale;
     let postH = 130 * scale;
 
-    // Structural Posts
     ctx.fillStyle = "#7f8c8d";
     ctx.fillRect(x - w * 0.35 - postW / 2, y - postH, postW, postH);
     ctx.fillRect(x + w * 0.35 - postW / 2, y - postH, postW, postH);
 
-    // Standard Interstate Green Frame
     ctx.fillStyle = "#0f5132";
     ctx.fillRect(x - w / 2, y - postH - h, w, h);
     
-    // Outer white piping trim
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = Math.max(1, 2 * scale);
     ctx.strokeRect(x - w / 2 + 4, y - postH - h + 4, w - 8, h - 8);
 
-    // Typography Clean Font
     ctx.fillStyle = "#ffffff";
     ctx.font = `bold ${Math.max(6, Math.floor(12 * scale))}px sans-serif`;
     ctx.textAlign = "center";
@@ -123,14 +116,12 @@ let segments = [];
 function createTrack() {
     segments = [];
     for (let i = 0; i < TRACK_LENGTH; i++) {
-        // Natural gradual smooth curves
         let curve = 0;
         if (i > 60 && i < 160) curve = 1.2;
         if (i > 240 && i < 340) curve = -1.8;
         if (i > 450 && i < 600) curve = 2.5;
         if (i > 750 && i < 900) curve = -1.5;
 
-        // Smooth elevation rolling hills
         let worldY = 0;
         if (i > 150 && i < 350) worldY = Math.sin(((i - 150) / 200) * Math.PI) * 700; 
         if (i > 500 && i < 750) worldY = Math.sin(((i - 500) / 250) * Math.PI) * -500; 
@@ -138,9 +129,9 @@ function createTrack() {
 
         let sprite = null;
         if (i % 6 === 0) {
-            sprite = { type: 'tree', side: (Math.random() > 0.5 ? 1.7 : -1.7) };
+            sprite = { type: 'tree', side: (Math.random() > 0.5 ? 2.2 : -2.2) }; // Pushed foliage further back out of the driving lane boundary
         } else if (i % 31 === 0) {
-            sprite = { type: 'sign', side: 1.8 }; // Standard right shoulder safety signs
+            sprite = { type: 'sign', side: 2.3 }; 
         }
 
         let isRumbleEven = Math.floor(i / RUMBLE_LENGTH) % 2 === 0;
@@ -153,11 +144,11 @@ function createTrack() {
             curve: curve,
             sprite: sprite,
             color: {
-                road: '#2c3e50', // Matte realistic deep asphalt dark gray
-                grass: isRumbleEven ? '#27ae60' : '#219653', // Natural earthy fields 
-                rumble: '#7f8c8d', // Asphalt standard concrete edge shoulder lines
+                road: '#2c3e50', 
+                grass: isRumbleEven ? '#27ae60' : '#219653', 
+                rumble: '#7f8c8d', 
                 lane: isLaneEven ? '#ffffff' : 'transparent', 
-                yellowLine: '#f1c40f' // Solid left yellow safety divider
+                yellowLine: '#f1c40f' 
             }
         });
     }
@@ -175,7 +166,7 @@ function spawnCars() {
     for (let i = 40; i < TRACK_LENGTH - 40; i += 18) {
         cars.push({
             z: i * SEGMENT_LENGTH,        
-            laneX: (Math.random() * 1.6) - 0.8, // Distributed properly across highway lanes       
+            laneX: (Math.random() * 1.4) - 0.7,       
             speed: maxSpeed * 0.5 + (Math.random() * maxSpeed * 0.25), 
             color: REALISTIC_CAR_COLORS[Math.floor(Math.random() * REALISTIC_CAR_COLORS.length)],
             w: 450                                     
@@ -183,7 +174,7 @@ function spawnCars() {
     }
 }
 
-// --- Linear Matrix Matrix Transformations ---
+// --- Linear Transformations ---
 function project(p, cameraX, cameraY, cameraZ) {
     if (!canvas) return;
     let transX = p.world.x - cameraX;
@@ -210,7 +201,6 @@ function drawPolygon(x1, y1, w1, x2, y2, w2, color, fogDensity = 0) {
     ctx.fill();
 
     if (fogDensity > 0) {
-        // Natural dusty horizontal fog blending
         ctx.fillStyle = `rgba(230, 126, 34, ${fogDensity * 0.85})`; 
         ctx.beginPath();
         ctx.moveTo(x1 - w1, y1);
@@ -239,16 +229,13 @@ function drawRealisticCar(x, y, width, height, baseColor, isPlayer = false, roll
     let cabinW = width * 0.78;
     let cabinH = height * 0.52;
 
-    // Under-body Shadow
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.fillRect(-width * 0.55, -wheelH * 0.5, width * 1.1, wheelH * 0.6);
 
-    // Rubber Tires
     ctx.fillStyle = "#1c1c1c";
     ctx.fillRect(-width / 2, -wheelH, wheelW, wheelH); 
     ctx.fillRect(width / 2 - wheelW, -wheelH, wheelW, wheelH); 
 
-    // Main Chassis Body
     ctx.fillStyle = baseColor;
     ctx.beginPath();
     ctx.moveTo(-width / 2, -wheelH * 0.3);
@@ -262,7 +249,6 @@ function drawRealisticCar(x, y, width, height, baseColor, isPlayer = false, roll
     ctx.closePath();
     ctx.fill();
 
-    // Windshield Reflection Tint
     ctx.fillStyle = "rgba(32, 40, 50, 0.85)";
     ctx.beginPath();
     ctx.moveTo(-cabinW * 0.38, -height * 0.52);
@@ -272,7 +258,6 @@ function drawRealisticCar(x, y, width, height, baseColor, isPlayer = false, roll
     ctx.closePath();
     ctx.fill();
 
-    // High fidelity realistic brake lighting matrices
     if (isPlayer && (keys['ArrowDown'] || keys['s'] || keys['S'])) {
         ctx.fillStyle = "#ff2222"; 
         ctx.shadowBlur = 12;
@@ -280,11 +265,9 @@ function drawRealisticCar(x, y, width, height, baseColor, isPlayer = false, roll
     } else {
         ctx.fillStyle = "#b31919"; 
     }
-    // Proportional slim rear light clusters
     ctx.fillRect(-width * 0.45, -height * 0.44, width * 0.18, height * 0.09);
     ctx.fillRect(width * 0.45 - (width * 0.18), -height * 0.44, width * 0.18, height * 0.09);
     
-    // License Plate Node
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#f1c40f";
     ctx.fillRect(-width * 0.08, -height * 0.36, width * 0.16, height * 0.07);
@@ -342,7 +325,17 @@ function update(dt) {
 
     let speedRatio = (speed / maxSpeed);
     
-    if (speedRatio > 0.1) {
+    // Road friction constraint modifiers (No dying on borders)
+    // playerX ranges from -1.0 to 1.0 on the asphalt road. 
+    if (playerX < -1.0 || playerX > 1.0) {
+        // We add heavy drag braking force to represent driving through dirty grass shoulders
+        if (speed > 1500) {
+            speed += breaking * 2.5 * dt; 
+        }
+        // Extra physics engine screen rumble shake for a bumpy terrain feeling
+        carBounceTimer += dt * 35;
+        screenShakeX += (Math.random() - 0.5) * 4.0;
+    } else if (speedRatio > 0.1) {
         carBounceTimer += dt * (speedRatio * 24);
         screenShakeX = (Math.random() - 0.5) * (speedRatio * 1.5);
         screenShakeY = (Math.random() - 0.5) * (speedRatio * 0.9);
@@ -375,13 +368,9 @@ function update(dt) {
         playerX -= currentSegment.curve * 0.02 * speedRatio;
     }
 
-    // Road friction constraints
-    if (playerX < -1.1 || playerX > 1.1) {
-        if (speed > 2000) speed += breaking * 1.2 * dt;
-    }
-
-    if (playerX < -1.7) playerX = -1.7;
-    if (playerX > 1.7) playerX = 1.7;
+    // Hard physics lock: keeps player cleanly bounded on screen borders without flat lining
+    if (playerX < -1.65) playerX = -1.65;
+    if (playerX > 1.65) playerX = 1.65;
     if (speed < 0) speed = 0;
     if (speed > maxSpeed) speed = maxSpeed;
 
@@ -399,7 +388,7 @@ function update(dt) {
             let distanceX = Math.abs(playerX - car.laneX);
             if (distanceX < 0.44) {
                 speed = 0;
-                gameOver = true;
+                gameOver = true; // Crashing into oncoming highway vehicles still results in a proper crash
             }
         }
     });
@@ -416,10 +405,10 @@ function render() {
 
     // 1. Photo-Realistic Sunset Sky Gradient Matrix
     let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
-    skyGrad.addColorStop(0, "#1f2d3d");    // Upper atmosphere twilight blue
-    skyGrad.addColorStop(0.45, "#cf6a1d"); // Mid-sky deep evening orange
-    skyGrad.addColorStop(0.75, "#e67e22"); // Incandescent golden horizon glow
-    skyGrad.addColorStop(1, "#f39c12");    // Bright low sun intensity
+    skyGrad.addColorStop(0, "#1f2d3d");    
+    skyGrad.addColorStop(0.45, "#cf6a1d"); 
+    skyGrad.addColorStop(0.75, "#e67e22"); 
+    skyGrad.addColorStop(1, "#f39c12");    
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
 
@@ -474,11 +463,9 @@ function render() {
 
         let fogDensity = Math.pow((i / maxDrawSegments), 2.2);
 
-        // Ground/Grass rendering matrix mapping
         ctx.fillStyle = segment.color.grass;
         ctx.fillRect(0, p2.y, canvas.width, p1.y - p2.y);
         
-        // Soft sunset atmospheric scattering over terrain
         ctx.fillStyle = `rgba(230, 126, 34, ${fogDensity * 0.7})`;
         ctx.fillRect(0, p2.y, canvas.width, p1.y - p2.y);
 
@@ -491,14 +478,11 @@ function render() {
         let yellowLineW1 = p1.w * 0.01;
         let yellowLineW2 = p2.w * 0.01;
 
-        // Base Road Track Polygons
         drawPolygon(p1.x, p1.y, p1.w + shoulderW1, p2.x, p2.y, p2.w + shoulderW2, segment.color.rumble, fogDensity);
         drawPolygon(p1.x, p1.y, p1.w, p2.x, p2.y, p2.w, segment.color.road, fogDensity);
         
-        // Center Dashed White Separation Lanes
         drawPolygon(p1.x, p1.y, centerDashW1, p2.x, p2.y, centerDashW2, segment.color.lane, fogDensity);
         
-        // Left Edge Yellow Solid Safety Line Boundary Mapping
         drawPolygon(p1.x - p1.w * 0.96, p1.y, yellowLineW1, p2.x - p2.w * 0.96, p2.y, yellowLineW2, segment.color.yellowLine, fogDensity);
 
         if (segment.sprite) {
@@ -555,7 +539,6 @@ function render() {
     let pCarBounce = (speed > 0) ? Math.sin(carBounceTimer) * 1.1 : 0;
     let pCarY = (canvas.height - 30) + pCarBounce;
     
-    // Sleek metallic graphite gray finish for player vehicle
     drawRealisticCar(pCarX, pCarY, pCarW, pCarH, "#4b5563", true, chassisRoll);
 
     // 5. Game Over Prompt Overlay Interception Matrix
@@ -592,5 +575,4 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
 gameLoop();
