@@ -2,21 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Synthwave Arcade Racer</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <div class="game-container">
+  <div class="arcade-cabinet">
     <div class="ui-bar">
-      <div class="stat">SPEED: <span id="speed-val">0</span> MPH</div>
-      <div class="stat">SCORE: <span id="score-val">0</span></div>
+      <div class="stat-box">SPEED: <span id="speed-val">0</span> MPH</div>
+      <div class="stat-box">SCORE: <span id="score-val">0</span></div>
     </div>
     <canvas id="gameCanvas"></canvas>
-    <div class="controls-hint">
-      [W,A,S,D] or [ARROWS] to Steer & Accelerate<br>
-      Avoid traffic. If you CRASH, press SPACEBAR or ENTER to race again.
+    <div class="controls-overlay" id="over-screen">
+      <h1 id="main-title">SYNTH RACER</h1>
+      <p id="sub-title">PRESS SPACEBAR OR ENTER TO START</p>
     </div>
   </div>
 
