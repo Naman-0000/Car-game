@@ -1,4 +1,4 @@
-  // --- Bulletproof Architecture Matrix ---
+ // --- Core Engine Framework ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas ? canvas.getContext("2d") : null;
 const speedVal = document.getElementById("speed-val");
@@ -9,32 +9,32 @@ if (canvas) {
     canvas.height = 600;
 }
 
-// --- Engine Configuration Settings ---
-const TRACK_LENGTH = 800;    
-const SEGMENT_LENGTH = 200;  
-const RUMBLE_LENGTH = 3;     
-const ROAD_WIDTH = 2000;     
+// --- World Geometry Adjustments ---
+const TRACK_LENGTH = 1200;    
+const SEGMENT_LENGTH = 160;  
+const RUMBLE_LENGTH = 4;     
+const ROAD_WIDTH = 2200;     
 const CAMERA_DEPTH = 0.84;   
 
-// --- Operational Engine States ---
+// --- Physics State Engines ---
 let playerX = 0;             
 let position = 0;            
 let speed = 0;               
-const maxSpeed = 13500;      
-const accel = 220;           
-const breaking = -350;       
+const maxSpeed = 12000;      // ~120 MPH cap for realism
+const accel = 180;           
+const breaking = -400;       
 
-// Realism Modifiers
+// Vibration/Bounce Vectors
 let carBounceTimer = 0;
 let screenShakeX = 0;
 let screenShakeY = 0;
-let chassisRoll = 0; // Simulated weight distribution lean
+let chassisRoll = 0; 
 
 let skyOffset = 0; 
 let score = 0;
 let gameOver = false;
 
-// --- Input Interception Framework ---
+// --- Input Map Matrix ---
 const keys = {};
 let resetCooldown = false; 
 
@@ -53,84 +53,98 @@ window.addEventListener('keyup', e => {
     keys[e.key] = false; 
 });
 
-// --- Vector Graphics Rendering Pipes ---
-function drawPalmTree(ctx, x, y, scale) {
+// --- Realistic Asset Painters ---
+function drawRealisticTree(ctx, x, y, scale) {
     if (!ctx) return;
-    let trunkH = 140 * scale;
-    let trunkW = 10 * scale;
+    let trunkH = 160 * scale;
+    let trunkW = 14 * scale;
 
-    ctx.fillStyle = "#4a3227"; 
+    // Soft organic shadowing
+    ctx.fillStyle = "rgba(10, 15, 10, 0.25)";
     ctx.beginPath();
-    ctx.moveTo(x - trunkW/2, y);
-    ctx.quadraticCurveTo(x - trunkW, y - trunkH*0.5, x + trunkW*0.5, y - trunkH);
-    ctx.lineTo(x + trunkW * 1.5, y - trunkH);
-    ctx.quadraticCurveTo(x, y - trunkH*0.5, x + trunkW/2, y);
+    ctx.ellipse(x, y, 40 * scale, 10 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Weathered Trunk
+    ctx.fillStyle = "#3e2723"; 
+    ctx.fillRect(x - trunkW / 2, y - trunkH, trunkW, trunkH);
+
+    // Layered Evergreen Foliage Cone
+    ctx.fillStyle = "#1e3f20"; 
+    ctx.beginPath();
+    ctx.moveTo(x - 55 * scale, y - trunkH * 0.3);
+    ctx.lineTo(x + 55 * scale, y - trunkH * 0.3);
+    ctx.lineTo(x, y - trunkH - 60 * scale);
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "#0d470d"; 
-    for(let i = 0; i < 7; i++) {
-        let angle = (i * Math.PI / 3) - Math.PI/6;
-        let leafLen = 45 * scale;
-        ctx.beginPath();
-        ctx.arc(x + trunkW*0.5 + Math.cos(angle)*leafLen*0.5, y - trunkH + Math.sin(angle)*leafLen*0.5, leafLen*0.5, 0, Math.PI*2);
-        ctx.fill();
-    }
+    ctx.fillStyle = "#152e17"; // Shaded interior canopy layer
+    ctx.beginPath();
+    ctx.moveTo(x - 40 * scale, y - trunkH * 0.6);
+    ctx.lineTo(x + 40 * scale, y - trunkH * 0.6);
+    ctx.lineTo(x, y - trunkH - 60 * scale);
+    ctx.closePath();
+    ctx.fill();
 }
 
-function drawBillboard(ctx, x, y, scale, index) {
+function drawHighwaySign(ctx, x, y, scale, index) {
     if (!ctx) return;
-    let w = 160 * scale;
-    let h = 80 * scale;
-    let postW = 8 * scale;
-    let postH = 60 * scale;
+    let w = 180 * scale;
+    let h = 95 * scale;
+    let postW = 6 * scale;
+    let postH = 130 * scale;
 
-    ctx.fillStyle = "#555555";
-    ctx.fillRect(x - w*0.3 - postW/2, y - postH, postW, postH);
-    ctx.fillRect(x + w*0.3 - postW/2, y - postH, postW, postH);
+    // Structural Posts
+    ctx.fillStyle = "#7f8c8d";
+    ctx.fillRect(x - w * 0.35 - postW / 2, y - postH, postW, postH);
+    ctx.fillRect(x + w * 0.35 - postW / 2, y - postH, postW, postH);
 
-    ctx.fillStyle = "#111111";
-    ctx.fillRect(x - w/2, y - postH - h, w, h);
+    // Standard Interstate Green Frame
+    ctx.fillStyle = "#0f5132";
+    ctx.fillRect(x - w / 2, y - postH - h, w, h);
+    
+    // Outer white piping trim
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1, 2 * scale);
+    ctx.strokeRect(x - w / 2 + 4, y - postH - h + 4, w - 8, h - 8);
 
-    ctx.fillStyle = (index % 2 === 0) ? "#e6b800" : "#00b3db";
-    ctx.fillRect(x - w/2 + 4, y - postH - h + 4, w - 8, h - 8);
-
-    ctx.fillStyle = "#111111";
-    ctx.font = `bold ${Math.max(6, Math.floor(14 * scale))}px Arial`;
+    // Typography Clean Font
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold ${Math.max(6, Math.floor(12 * scale))}px sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText((index % 2 === 0) ? "RACE" : "OUTRUN", x, y - postH - h/2 + 4);
+    ctx.fillText((index % 2 === 0) ? "WEST Interstate 80" : "EXIT 24 A", x, y - postH - h + h * 0.35);
+    
+    ctx.font = `${Math.max(5, Math.floor(10 * scale))}px sans-serif`;
+    ctx.fillText((index % 2 === 0) ? "1 MILE" : "KEEP RIGHT", x, y - postH - h + h * 0.7);
 }
 
-// --- Procedural Generation Protocols (With 3D Elevation / Hills) ---
+// --- Realistic Procedural Generation Setup ---
 let segments = [];
 function createTrack() {
     segments = [];
     for (let i = 0; i < TRACK_LENGTH; i++) {
+        // Natural gradual smooth curves
         let curve = 0;
-        // Turn Segments
-        if (i > 40 && i < 110) curve = 2.4;
-        if (i > 170 && i < 240) curve = -3.4;
-        if (i > 320 && i < 430) curve = 4.8;
-        if (i > 520 && i < 600) curve = -2.5;
+        if (i > 60 && i < 160) curve = 1.2;
+        if (i > 240 && i < 340) curve = -1.8;
+        if (i > 450 && i < 600) curve = 2.5;
+        if (i > 750 && i < 900) curve = -1.5;
 
-        // Elevation Geometry (Realism upgrade: Hills)
+        // Smooth elevation rolling hills
         let worldY = 0;
-        if (i > 100 && i < 220) {
-            worldY = Math.sin(((i - 100) / 120) * Math.PI) * 1100; // Large sweeping hill
-        }
-        if (i > 380 && i < 500) {
-            worldY = Math.sin(((i - 380) / 120) * Math.PI) * -900; // Sudden dip/valley
-        }
-        if (i > 620 && i < 740) {
-            worldY = Math.sin(((i - 620) / 120) * Math.PI) * 1400; // Steep climb
-        }
+        if (i > 150 && i < 350) worldY = Math.sin(((i - 150) / 200) * Math.PI) * 700; 
+        if (i > 500 && i < 750) worldY = Math.sin(((i - 500) / 250) * Math.PI) * -500; 
+        if (i > 850 && i < 1100) worldY = Math.sin(((i - 850) / 250) * Math.PI) * 900; 
 
         let sprite = null;
-        if (i % 7 === 0) {
-            sprite = { type: 'tree', side: (Math.random() > 0.5 ? 1.6 : -1.6) };
-        } else if (i % 19 === 0) {
-            sprite = { type: 'billboard', side: (Math.random() > 0.5 ? 1.8 : -1.8) };
+        if (i % 6 === 0) {
+            sprite = { type: 'tree', side: (Math.random() > 0.5 ? 1.7 : -1.7) };
+        } else if (i % 31 === 0) {
+            sprite = { type: 'sign', side: 1.8 }; // Standard right shoulder safety signs
         }
+
+        let isRumbleEven = Math.floor(i / RUMBLE_LENGTH) % 2 === 0;
+        let isLaneEven = i % 2 === 0;
 
         segments.push({
             index: i,
@@ -138,33 +152,38 @@ function createTrack() {
             p2: { world: { x: 0, y: worldY, z: (i + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
             curve: curve,
             sprite: sprite,
-            color: Math.floor(i / RUMBLE_LENGTH) % 2 ? 
-                { road: '#292929', grass: '#144d14', rumble: '#cccccc', lane: '#ffffff' } : 
-                { road: '#242424', grass: '#0f3d0f', rumble: '#b81022', lane: 'transparent' }
+            color: {
+                road: '#2c3e50', // Matte realistic deep asphalt dark gray
+                grass: isRumbleEven ? '#27ae60' : '#219653', // Natural earthy fields 
+                rumble: '#7f8c8d', // Asphalt standard concrete edge shoulder lines
+                lane: isLaneEven ? '#ffffff' : 'transparent', 
+                yellowLine: '#f1c40f' // Solid left yellow safety divider
+            }
         });
     }
 
-    // Connect segment heights smoothly across boundaries
     for (let i = 1; i < TRACK_LENGTH; i++) {
         segments[i].p1.world.y = segments[i-1].p2.world.y;
     }
 }
 
 let cars = [];
+const REALISTIC_CAR_COLORS = ["#34495e", "#7f8c8d", "#c0392b", "#2c3e50", "#d35400", "#16a085", "#f39c12", "#bdc3c7"];
+
 function spawnCars() {
     cars = [];
-    for (let i = 50; i < TRACK_LENGTH - 50; i += 24) {
+    for (let i = 40; i < TRACK_LENGTH - 40; i += 18) {
         cars.push({
             z: i * SEGMENT_LENGTH,        
-            laneX: (Math.random() * 1.5) - 0.75,        
-            speed: maxSpeed * 0.45 + (Math.random() * maxSpeed * 0.35), 
-            color: `hsl(${Math.random() * 360}, 75%, 40%)`,
-            w: 460                                     
+            laneX: (Math.random() * 1.6) - 0.8, // Distributed properly across highway lanes       
+            speed: maxSpeed * 0.5 + (Math.random() * maxSpeed * 0.25), 
+            color: REALISTIC_CAR_COLORS[Math.floor(Math.random() * REALISTIC_CAR_COLORS.length)],
+            w: 450                                     
         });
     }
 }
 
-// --- Projection Math Matrix Transformation (Accounting for Pitch & Elevation) ---
+// --- Linear Matrix Matrix Transformations ---
 function project(p, cameraX, cameraY, cameraZ) {
     if (!canvas) return;
     let transX = p.world.x - cameraX;
@@ -191,7 +210,8 @@ function drawPolygon(x1, y1, w1, x2, y2, w2, color, fogDensity = 0) {
     ctx.fill();
 
     if (fogDensity > 0) {
-        ctx.fillStyle = `rgba(247, 158, 59, ${fogDensity})`; 
+        // Natural dusty horizontal fog blending
+        ctx.fillStyle = `rgba(230, 126, 34, ${fogDensity * 0.85})`; 
         ctx.beginPath();
         ctx.moveTo(x1 - w1, y1);
         ctx.lineTo(x2 - w2, y2);
@@ -202,9 +222,9 @@ function drawPolygon(x1, y1, w1, x2, y2, w2, color, fogDensity = 0) {
     }
 }
 
-function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false, rollLean = 0) {
+function drawRealisticCar(x, y, width, height, baseColor, isPlayer = false, rollLean = 0) {
     if (!ctx) return;
-    if (width < 12) {
+    if (width < 10) {
         ctx.fillStyle = baseColor;
         ctx.fillRect(x - width / 2, y - height, width, height);
         return;
@@ -212,57 +232,63 @@ function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false, rollL
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(rollLean); // Lean frame during high-speed cornering shifts
+    ctx.rotate(rollLean); 
 
-    let wheelW = width * 0.19;
-    let wheelH = height * 0.46;
-    let cabinW = width * 0.72;
-    let cabinH = height * 0.48;
+    let wheelW = width * 0.18;
+    let wheelH = height * 0.42;
+    let cabinW = width * 0.78;
+    let cabinH = height * 0.52;
 
-    // Rear tires
-    ctx.fillStyle = "#111111";
+    // Under-body Shadow
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(-width * 0.55, -wheelH * 0.5, width * 1.1, wheelH * 0.6);
+
+    // Rubber Tires
+    ctx.fillStyle = "#1c1c1c";
     ctx.fillRect(-width / 2, -wheelH, wheelW, wheelH); 
     ctx.fillRect(width / 2 - wheelW, -wheelH, wheelW, wheelH); 
 
-    // Under-chassis shadow lip
-    ctx.fillStyle = "#181818";
-    ctx.fillRect(-width / 2 - 2, -height, width + 4, height * 0.14);
-
-    // Main bumper framing body
+    // Main Chassis Body
     ctx.fillStyle = baseColor;
     ctx.beginPath();
-    ctx.moveTo(-width / 2, -wheelH * 0.4);
-    ctx.lineTo(-width / 2 + 3, -height * 0.58);
-    ctx.lineTo(-cabinW / 2, -height * 0.58);
-    ctx.lineTo(-cabinW * 0.38, -height + 3);
-    ctx.lineTo(cabinW * 0.38, -height + 3);
-    ctx.lineTo(cabinW / 2, -height * 0.58);
-    ctx.lineTo(width / 2 - 3, -height * 0.58);
-    ctx.lineTo(width / 2, -wheelH * 0.4);
+    ctx.moveTo(-width / 2, -wheelH * 0.3);
+    ctx.lineTo(-width / 2 + 2, -height * 0.5);
+    ctx.lineTo(-cabinW / 2, -height * 0.5);
+    ctx.lineTo(-cabinW * 0.4, -height);
+    ctx.lineTo(cabinW * 0.4, -height);
+    ctx.lineTo(cabinW / 2, -height * 0.5);
+    ctx.lineTo(width / 2 - 2, -height * 0.5);
+    ctx.lineTo(width / 2, -wheelH * 0.3);
     ctx.closePath();
     ctx.fill();
 
-    // Windshield cockpit
-    ctx.fillStyle = "#1a2430";
+    // Windshield Reflection Tint
+    ctx.fillStyle = "rgba(32, 40, 50, 0.85)";
     ctx.beginPath();
-    ctx.moveTo(-cabinW * 0.38, -height * 0.58);
-    ctx.lineTo(-cabinW * 0.28, -height + 6);
-    ctx.lineTo(cabinW * 0.28, -height + 6);
-    ctx.lineTo(cabinW * 0.38, -height * 0.58);
+    ctx.moveTo(-cabinW * 0.38, -height * 0.52);
+    ctx.lineTo(-cabinW * 0.28, -height + 4);
+    ctx.lineTo(cabinW * 0.28, -height + 4);
+    ctx.lineTo(cabinW * 0.38, -height * 0.52);
     ctx.closePath();
     ctx.fill();
 
-    // Responsive Braking Tail lamps
+    // High fidelity realistic brake lighting matrices
     if (isPlayer && (keys['ArrowDown'] || keys['s'] || keys['S'])) {
-        ctx.fillStyle = "#ff1a1a"; 
-        ctx.shadowBlur = 15;
+        ctx.fillStyle = "#ff2222"; 
+        ctx.shadowBlur = 12;
         ctx.shadowColor = "#ff0000";
     } else {
-        ctx.fillStyle = "#910000"; 
+        ctx.fillStyle = "#b31919"; 
     }
-    ctx.fillRect(-width * 0.44, -height * 0.5, width * 0.16, height * 0.11);
-    ctx.fillRect(width * 0.44 - (width * 0.16), -height * 0.5, width * 0.16, height * 0.11);
+    // Proportional slim rear light clusters
+    ctx.fillRect(-width * 0.45, -height * 0.44, width * 0.18, height * 0.09);
+    ctx.fillRect(width * 0.45 - (width * 0.18), -height * 0.44, width * 0.18, height * 0.09);
     
+    // License Plate Node
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#f1c40f";
+    ctx.fillRect(-width * 0.08, -height * 0.36, width * 0.16, height * 0.07);
+
     ctx.restore();
 }
 
@@ -287,7 +313,7 @@ function resetGame() {
 createTrack();
 spawnCars();
 
-// --- Main Engine Calculations Pipe ---
+// --- Processing Computation Logic ---
 function update(dt) {
     if (gameOver) return;
 
@@ -302,9 +328,8 @@ function update(dt) {
     if (speedVal) speedVal.innerText = Math.round(speed / 100);
     if (scoreVal) scoreVal.innerText = score;
 
-    // Realism Upgrade: Natural Exponential Drag Physics
-    let airResistance = -0.000012 * (speed * speed); 
-    let rollingFriction = -95;                      
+    let airResistance = -0.000014 * (speed * speed); 
+    let rollingFriction = -110;                      
     speed += (airResistance + rollingFriction) * dt;
 
     if (keys['ArrowUp'] || keys['w'] || keys['W'] || keys[' ']) {
@@ -317,69 +342,62 @@ function update(dt) {
 
     let speedRatio = (speed / maxSpeed);
     
-    // Road vibration engine feedback
     if (speedRatio > 0.1) {
-        carBounceTimer += dt * (speedRatio * 28);
-        screenShakeX = (Math.random() - 0.5) * (speedRatio * 2.2);
-        screenShakeY = (Math.random() - 0.5) * (speedRatio * 1.4);
+        carBounceTimer += dt * (speedRatio * 24);
+        screenShakeX = (Math.random() - 0.5) * (speedRatio * 1.5);
+        screenShakeY = (Math.random() - 0.5) * (speedRatio * 0.9);
     } else {
         carBounceTimer = 0;
         screenShakeX = 0;
         screenShakeY = 0;
     }
 
-    // Steering Handling Matrix
     if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
-        playerX -= 0.044 * speedRatio;
-        chassisRoll = Math.max(-0.05, chassisRoll - 0.2 * dt); // Chassis shifts weight right
+        playerX -= 0.038 * speedRatio;
+        chassisRoll = Math.max(-0.04, chassisRoll - 0.18 * dt); 
         if(speed > 0 && currentSegment) {
-            skyOffset += currentSegment.curve * 0.3 * speedRatio + 1.6;
+            skyOffset += currentSegment.curve * 0.2 * speedRatio + 1.2;
         }
     } else if (keys['ArrowRight'] || keys['d'] || keys['D']) {
-        playerX += 0.044 * speedRatio;
-        chassisRoll = Math.min(0.05, chassisRoll + 0.2 * dt);  // Chassis shifts weight left
+        playerX += 0.038 * speedRatio;
+        chassisRoll = Math.min(0.04, chassisRoll + 0.18 * dt);  
         if(speed > 0 && currentSegment) {
-            skyOffset += currentSegment.curve * 0.3 * speedRatio - 1.6;
+            skyOffset += currentSegment.curve * 0.2 * speedRatio - 1.2;
         }
     } else {
-        // Natural center snap alignment when hands off wheel
-        chassisRoll *= Math.pow(0.005, dt); 
+        chassisRoll *= Math.pow(0.004, dt); 
         if(speed > 0 && currentSegment && currentSegment.curve !== 0) {
-            skyOffset += currentSegment.curve * 0.6 * speedRatio;
+            skyOffset += currentSegment.curve * 0.4 * speedRatio;
         }
     }
 
-    // Realism Upgrade: Centrifugal G-Force in Sharp Curves
     if (currentSegment && speed > 0) {
-        // Pushes player outwards based on the curve magnitude multiplied by velocity intensity
-        playerX -= currentSegment.curve * 0.024 * speedRatio;
+        playerX -= currentSegment.curve * 0.02 * speedRatio;
     }
 
-    if (playerX < -1.4 || playerX > 1.4) {
-        // Off-road terrain drag reduction simulation (grass friction)
-        if (speed > 2500) speed += breaking * 1.5 * dt;
+    // Road friction constraints
+    if (playerX < -1.1 || playerX > 1.1) {
+        if (speed > 2000) speed += breaking * 1.2 * dt;
     }
 
-    // Clamp soft bounds
-    if (playerX < -1.85) playerX = -1.85;
-    if (playerX > 1.85) playerX = 1.85;
+    if (playerX < -1.7) playerX = -1.7;
+    if (playerX > 1.7) playerX = 1.7;
     if (speed < 0) speed = 0;
     if (speed > maxSpeed) speed = maxSpeed;
 
     if (speed > 100) {
-        score += Math.floor(speed / 2800);
+        score += Math.floor(speed / 3200);
     }
 
-    // Process Target Bots
     cars.forEach(car => {
         car.z += car.speed * dt;
         while (car.z >= trackTotalLength) car.z -= trackTotalLength;
         while (car.z < 0) car.z += trackTotalLength;
 
         let zDiff = Math.abs(position - car.z);
-        if (zDiff < 280 || zDiff > trackTotalLength - 280) {
+        if (zDiff < 240 || zDiff > trackTotalLength - 240) {
             let distanceX = Math.abs(playerX - car.laneX);
-            if (distanceX < 0.42) {
+            if (distanceX < 0.44) {
                 speed = 0;
                 gameOver = true;
             }
@@ -387,7 +405,7 @@ function update(dt) {
     });
 }
 
-// --- Graphics Paint Buffer Loop ---
+// --- Graphical Render Engine Pipe ---
 function render() {
     if (!canvas || !ctx) return;
 
@@ -396,40 +414,26 @@ function render() {
     ctx.save();
     ctx.translate(screenShakeX, screenShakeY);
 
-    // 1. Synthwave Sky
+    // 1. Photo-Realistic Sunset Sky Gradient Matrix
     let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
-    skyGrad.addColorStop(0, "#130624"); 
-    skyGrad.addColorStop(0.4, "#521442"); 
-    skyGrad.addColorStop(0.75, "#b83925"); 
-    skyGrad.addColorStop(1, "#f79e3b"); 
+    skyGrad.addColorStop(0, "#1f2d3d");    // Upper atmosphere twilight blue
+    skyGrad.addColorStop(0.45, "#cf6a1d"); // Mid-sky deep evening orange
+    skyGrad.addColorStop(0.75, "#e67e22"); // Incandescent golden horizon glow
+    skyGrad.addColorStop(1, "#f39c12");    // Bright low sun intensity
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
 
-    // 2. Neon Sun & Parallax Ranges
-    let sunX = (canvas.width * 0.7) + (skyOffset * 0.1); 
-    ctx.fillStyle = "#ffcc00"; 
-    ctx.beginPath();
-    ctx.arc(sunX, canvas.height / 2 - 10, 50, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#b83925";
-    ctx.fillRect(sunX - 55, canvas.height / 2 - 25, 110, 2);
-    ctx.fillRect(sunX - 55, canvas.height / 2 - 15, 110, 3);
-    ctx.fillRect(sunX - 55, canvas.height / 2 - 5, 110, 4);
-
-    ctx.fillStyle = "#2d0e28";
-    for (let m = -2; m < 6; m++) {
-        let mX = (m * 300) + (skyOffset % 300);
+    // 2. Realistic Stratus Cloud Layout Layer
+    ctx.fillStyle = "rgba(241, 196, 15, 0.15)";
+    for (let c = 0; c < 4; c++) {
+        let cloudX = ((c * 260) + (skyOffset * 0.15)) % (canvas.width + 200) - 100;
         ctx.beginPath();
-        ctx.moveTo(mX, canvas.height / 2);
-        ctx.lineTo(mX + 150, canvas.height / 2 - 45);
-        ctx.lineTo(mX + 300, canvas.height / 2);
-        ctx.closePath();
+        ctx.ellipse(cloudX, 80 + c * 20, 160, 12, 0, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // 3. Landscape Base
-    ctx.fillStyle = "#0a260a"; 
+    // 3. Landscape Ground Fill Plane
+    ctx.fillStyle = "#1e4620"; 
     ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
 
     const trackTotalLength = TRACK_LENGTH * SEGMENT_LENGTH;
@@ -439,17 +443,16 @@ function render() {
     
     if (!baseSegment) { ctx.restore(); return; }
 
-    // Realism adjustment: Camera tracks the elevation changes of the car smoothly
-    let cameraHeight = 1500 + baseSegment.p1.world.y; 
+    let cameraHeight = 1450 + baseSegment.p1.world.y; 
 
     let maxy = canvas.height;
     let xOffset = 0;
     let dx = -(baseSegment.curve * (position % SEGMENT_LENGTH / SEGMENT_LENGTH));
 
     let drawQueue = [];
-    let maxDrawSegments = 140;
+    let maxDrawSegments = 160;
 
-    // Loop 3A: Draw 3D Ground Mesh & Hills
+    // Loop 3A: Draw 3D Ground Mesh
     for (let i = 0; i < maxDrawSegments; i++) {
         let targetIndex = (startSegIndex + i) % TRACK_LENGTH;
         let segment = segments[targetIndex];
@@ -466,25 +469,37 @@ function render() {
         let p1 = segment.p1.screen;
         let p2 = segment.p2.screen;
 
-        // Clip segments behind the camera or occluded by closer cresting hills
         if (p1.y >= maxy || p2.y >= p1.y) continue;
         maxy = p1.y;
 
-        let fogDensity = Math.pow((i / maxDrawSegments), 2.5);
+        let fogDensity = Math.pow((i / maxDrawSegments), 2.2);
 
+        // Ground/Grass rendering matrix mapping
         ctx.fillStyle = segment.color.grass;
         ctx.fillRect(0, p2.y, canvas.width, p1.y - p2.y);
-        ctx.fillStyle = `rgba(247, 158, 59, ${fogDensity})`;
+        
+        // Soft sunset atmospheric scattering over terrain
+        ctx.fillStyle = `rgba(230, 126, 34, ${fogDensity * 0.7})`;
         ctx.fillRect(0, p2.y, canvas.width, p1.y - p2.y);
 
-        let rumble1 = p1.w * 0.11;
-        let rumble2 = p2.w * 0.11;
-        let laneW1 = p1.w * 0.02;
-        let laneW2 = p2.w * 0.02;
+        let shoulderW1 = p1.w * 0.08;
+        let shoulderW2 = p2.w * 0.08;
+        
+        let centerDashW1 = p1.w * 0.012;
+        let centerDashW2 = p2.w * 0.012;
 
-        drawPolygon(p1.x, p1.y, p1.w + rumble1, p2.x, p2.y, p2.w + rumble2, segment.color.rumble, fogDensity);
+        let yellowLineW1 = p1.w * 0.01;
+        let yellowLineW2 = p2.w * 0.01;
+
+        // Base Road Track Polygons
+        drawPolygon(p1.x, p1.y, p1.w + shoulderW1, p2.x, p2.y, p2.w + shoulderW2, segment.color.rumble, fogDensity);
         drawPolygon(p1.x, p1.y, p1.w, p2.x, p2.y, p2.w, segment.color.road, fogDensity);
-        drawPolygon(p1.x, p1.y, laneW1, p2.x, p2.y, laneW2, segment.color.lane, fogDensity);
+        
+        // Center Dashed White Separation Lanes
+        drawPolygon(p1.x, p1.y, centerDashW1, p2.x, p2.y, centerDashW2, segment.color.lane, fogDensity);
+        
+        // Left Edge Yellow Solid Safety Line Boundary Mapping
+        drawPolygon(p1.x - p1.w * 0.96, p1.y, yellowLineW1, p2.x - p2.w * 0.96, p2.y, yellowLineW2, segment.color.yellowLine, fogDensity);
 
         if (segment.sprite) {
             drawQueue.push({
@@ -498,19 +513,19 @@ function render() {
         }
     }
 
-    // Loop 3B: Side Scenery Objects
+    // Loop 3B: Environments Scenery Sorting Pipeline
     for (let i = drawQueue.length - 1; i >= 0; i--) {
         let item = drawQueue[i];
         if (item.type === 'sprite') {
             if (item.spriteData.type === 'tree') {
-                drawPalmTree(ctx, item.screenX, item.screenY, item.scale * 4.5);
-            } else if (item.spriteData.type === 'billboard') {
-                drawBillboard(ctx, item.screenX, item.screenY, item.scale * 4.0, item.index);
+                drawRealisticTree(ctx, item.screenX, item.screenY, item.scale * 4.6);
+            } else if (item.spriteData.type === 'sign') {
+                drawHighwaySign(ctx, item.screenX, item.screenY, item.scale * 4.2, item.index);
             }
         }
     }
 
-    // Loop 3C: Traffic Car Positioning (Calculates relative 3D hill offsets)
+    // Loop 3C: Highway Traffic Positioning Pipes
     for (let i = cars.length - 1; i >= 0; i--) {
         let car = cars[i];
         let relativeZ = car.z - position;
@@ -523,48 +538,45 @@ function render() {
 
             let scale = CAMERA_DEPTH / relativeZ;
             let carX = seg.p1.screen.x + (scale * (car.laneX - playerX) * (ROAD_WIDTH * 0.54) * canvas.width / 2);
-            
-            // Adjusts enemy height projection based on hill contours relative to player camera context
             let carY = seg.p1.screen.y; 
             let carW = scale * car.w * canvas.width / 2;
-            let carH = carW * 0.54;
+            let carH = carW * 0.52;
 
-            let enemyBounce = Math.sin((car.z * 0.05)) * 0.8;
-            drawPseudo3DCar(carX, carY + enemyBounce, carW, carH, car.color, false, 0);
+            let trafficBounce = Math.sin((car.z * 0.04)) * 0.5;
+            drawRealisticCar(carX, carY + trafficBounce, carW, carH, car.color, false, 0);
         }
     }
 
-    // 4. Primary Player Cockpit Vector Layer
-    let pCarW = 160;
-    let pCarH = 88;
+    // 4. Primary Driver Car Layer Configuration
+    let pCarW = 164;
+    let pCarH = 84;
     let pCarX = canvas.width / 2;
     
-    // Suspension travel calculations
-    let pCarBounce = (speed > 0) ? Math.sin(carBounceTimer) * 1.4 : 0;
-    let pCarY = (canvas.height - 25) + pCarBounce;
+    let pCarBounce = (speed > 0) ? Math.sin(carBounceTimer) * 1.1 : 0;
+    let pCarY = (canvas.height - 30) + pCarBounce;
     
-    // Pass chassisRoll variable to skew frame during severe swerving drops
-    drawPseudo3DCar(pCarX, pCarY, pCarW, pCarH, "#00e5ff", true, chassisRoll);
+    // Sleek metallic graphite gray finish for player vehicle
+    drawRealisticCar(pCarX, pCarY, pCarW, pCarH, "#4b5563", true, chassisRoll);
 
-    // 5. Game Over Prompt
+    // 5. Game Over Prompt Overlay Interception Matrix
     if (gameOver) {
-        ctx.fillStyle = "rgba(12, 5, 24, 0.88)";
+        ctx.fillStyle = "rgba(10, 15, 20, 0.9)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = "#ff0066";
-        ctx.font = "bold 44px 'Courier New'";
-        ctx.textAlign = "center";
-        ctx.fillText("CRASHED!", canvas.width / 2, canvas.height / 2 - 20);
-        
         ctx.fillStyle = "#ffffff";
-        ctx.font = "18px 'Courier New'";
-        ctx.fillText(`FINAL SCORE: ${score} | Hit SPACEBAR to race again`, canvas.width / 2, canvas.height / 2 + 35);
+        ctx.font = "bold 36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("COLLISION DETECTED", canvas.width / 2, canvas.height / 2 - 15);
+        
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "16px sans-serif";
+        ctx.fillText(`DRIVING DISTANCE SCORE: ${score} | Press SPACEBAR to restart`, canvas.width / 2, canvas.height / 2 + 30);
     }
 
     ctx.restore(); 
 }
 
-// --- Main Loop Tick ---
+// --- Frame Tick Iteration Engine ---
 let lastTime = performance.now();
 function gameLoop() {
     try {
@@ -575,9 +587,10 @@ function gameLoop() {
         update(dt);
         render();
     } catch (e) {
-        // Safe catch container
+        // Fallback protection state loop
     }
     requestAnimationFrame(gameLoop);
 }
 
+gameLoop();
 gameLoop();
