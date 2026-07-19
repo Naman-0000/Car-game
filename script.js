@@ -1,358 +1,524 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const scoreVal = document.getElementById('score-val');
-const speedVal = document.getElementById('speed-val');
-const overlay = document.getElementById('over-screen');
-const mainTitle = document.getElementById('main-title');
-const subTitle = document.getElementById('sub-title');
+// --- Bulletproof Architecture Matrix ---
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas ? canvas.getContext("2d") : null;
+const speedVal = document.getElementById("speed-val");
+const scoreVal = document.getElementById("score-val");
 
-// Match inner canvas resolution to screen frame aspect ratio
-function resizeCanvas() {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
+if (canvas && (!canvas.width || canvas.width === 0)) canvas.width = 640;
+if (canvas && (!canvas.height || canvas.height === 0)) canvas.height = 480;
 
-// Engine Architecture Parameters
-let gameActive = false;
-let gameOver = false;
+// --- Engine Configuration Settings ---
+const TRACK_LENGTH = 600;    
+const SEGMENT_LENGTH = 200;  
+const RUMBLE_LENGTH = 3;     
+const ROAD_WIDTH = 2000;     
+const CAMERA_DEPTH = 0.84;   
+
+// --- Operational Engine States ---
+let playerX = 0;             
+let position = 0;            
+let speed = 0;               
+const maxSpeed = 13500;      
+const accel = 220;           
+const breaking = -350;       
+const decel = -100;          
 let score = 0;
-let distance = 0;
-let speed = 0;
-const maxSpeed = 220;
+let gameOver = false;
+let skyOffset = 0; 
 
-let trackPosition = 0;
-let playerX = 0; // Centerline position map: -1.0 to 1.0
-let skyOffset = 0;
+// Realism & Physics Modifiers
+let carBounceTimer = 0;
+let screenShakeX = 0;
+let screenShakeY = 0;
 
-// Track Segments Array
-const segments = [];
-const segmentLength = 200;
-const roadWidth = 1200;
-const horizonRatio = 0.45; // Fixed camera horizon split point
+// --- Input Interception Framework (Spam Protected) ---
+const keys = {};
+let resetCooldown = false; 
 
-// Create structural highway path loop
-for (let i = 0; i < 600; i++) {
-    let curve = 0;
-    if (i > 60 && i < 140) curve = 2.0;   // Hard right bend
-    if (i > 180 && i < 260) curve = -2.5; // Left sweep
-    if (i > 340 && i < 420) curve = 4.0;  // Sharp spiral curve
-    if (i > 460 && i < 540) curve = -1.5;
+window.addEventListener('keydown', e => { 
+    keys[e.key] = true; 
+    
+    // Safety lock intercepts rapid Enter/Spacebar double-taps
+    if (gameOver && (e.key === ' ' || e.key === 'Enter')) {
+        if (!resetCooldown) {
+            resetCooldown = true;
+            resetGame();
+            setTimeout(() => { resetCooldown = false; }, 400); 
+        }
+    }
+});
 
-    segments.push({
-        index: i,
-        z1: i * segmentLength,
-        z2: (i + 1) * segmentLength,
-        curve: curve,
-        roadColor: (Math.floor(i / 3) % 2) ? '#1b122c' : '#231838',
-        rumbleColor: (Math.floor(i / 3) % 2) ? '#ff0055' : '#ffffff',
-        gridColor: (Math.floor(i / 3) % 2) ? '#05010a' : '#0a0314'
-    });
+window.addEventListener('keyup', e => { 
+    keys[e.key] = false; 
+});
+
+// --- Vector Graphics Rendering Pipes ---
+function drawPalmTree(ctx, x, y, scale) {
+    if (!ctx) return;
+    let trunkH = 140 * scale;
+    let trunkW = 10 * scale;
+
+    ctx.fillStyle = "#4a3227"; 
+    ctx.beginPath();
+    ctx.moveTo(x - trunkW/2, y);
+    ctx.quadraticCurveTo(x - trunkW, y - trunkH*0.5, x + trunkW*0.5, y - trunkH);
+    ctx.lineTo(x + trunkW * 1.5, y - trunkH);
+    ctx.quadraticCurveTo(x, y - trunkH*0.5, x + trunkW/2, y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#0d470d"; 
+    for(let i = 0; i < 7; i++) {
+        let angle = (i * Math.PI / 3) - Math.PI/6;
+        let leafLen = 45 * scale;
+        ctx.beginPath();
+        ctx.arc(x + trunkW*0.5 + Math.cos(angle)*leafLen*0.5, y - trunkH + Math.sin(angle)*leafLen*0.5, leafLen*0.5, 0, Math.PI*2);
+        ctx.fill();
+    }
 }
-const trackLength = segments.length * segmentLength;
 
-// Traffic Structure Arrays
-let traffic = [];
-const carColors = ['#ff0055', '#9d00ff', '#ff9900', '#00ff66', '#ffff00'];
+function drawBillboard(ctx, x, y, scale, index) {
+    if (!ctx) return;
+    let w = 160 * scale;
+    let h = 80 * scale;
+    let postW = 8 * scale;
+    let postH = 60 * scale;
 
-function populateTraffic() {
-    traffic = [];
-    // Space out 35 high-speed target cars evenly along track length
-    for (let i = 0; i < 35; i++) {
-        traffic.push({
-            baseZ: Math.random() * (trackLength - 3000) + 2000,
-            currentZ: 0,
-            laneOffset: (Math.random() * 2 - 1) * 0.65, // Lock inside proper lanes
-            speed: 70 + Math.random() * 50, // Active target tracking speed
-            color: carColors[Math.floor(Math.random() * carColors.length)]
+    ctx.fillStyle = "#555555";
+    ctx.fillRect(x - w*0.3 - postW/2, y - postH, postW, postH);
+    ctx.fillRect(x + w*0.3 - postW/2, y - postH, postW, postH);
+
+    ctx.fillStyle = "#111111";
+    ctx.fillRect(x - w/2, y - postH - h, w, h);
+
+    ctx.fillStyle = (index % 2 === 0) ? "#e6b800" : "#00b3db";
+    ctx.fillRect(x - w/2 + 4, y - postH - h + 4, w - 8, h - 8);
+
+    ctx.fillStyle = "#111111";
+    ctx.font = `bold ${Math.max(6, Math.floor(14 * scale))}px Arial`;
+    ctx.textAlign = "center";
+    ctx.fillText((index % 2 === 0) ? "RACE" : "OUTRUN", x, y - postH - h/2 + 4);
+}
+
+// --- Procedural Generation Protocols ---
+let segments = [];
+function createTrack() {
+    segments = [];
+    for (let i = 0; i < TRACK_LENGTH; i++) {
+        let curve = 0;
+        if (i > 40 && i < 110) curve = 2.2;
+        if (i > 170 && i < 240) curve = -3.4;
+        if (i > 300 && i < 410) curve = 4.5;
+        if (i > 460 && i < 530) curve = -2.0;
+
+        let sprite = null;
+        if (i % 7 === 0) {
+            sprite = { type: 'tree', side: (Math.random() > 0.5 ? 1.6 : -1.6) };
+        } else if (i % 19 === 0) {
+            sprite = { type: 'billboard', side: (Math.random() > 0.5 ? 1.8 : -1.8) };
+        }
+
+        segments.push({
+            index: i,
+            p1: { world: { x: 0, y: 0, z: i * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+            p2: { world: { x: 0, y: 0, z: (i + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+            curve: curve,
+            sprite: sprite,
+            color: Math.floor(i / RUMBLE_LENGTH) % 2 ? 
+                { road: '#292929', grass: '#144d14', rumble: '#cccccc', lane: '#ffffff' } : 
+                { road: '#242424', grass: '#0f3d0f', rumble: '#b81022', lane: 'transparent' }
         });
     }
 }
 
-// 3D Matrix Mathematical Perspective Mapping
-function project3D(worldX, worldY, worldZ, cameraX, cameraY, cameraZ, camDepth, width, height) {
-    let transX = worldX - cameraX;
-    let transY = worldY - cameraY;
-    let transZ = worldZ - cameraZ;
-
-    if (transZ <= 0) return null;
-
-    let scale = camDepth / transZ;
-    return {
-        x: Math.round((width / 2) + (scale * transX * width / 2)),
-        y: Math.round((height * horizonRatio) - (scale * transY * height / 2)),
-        w: Math.round(scale * roadWidth * width / 2)
-    };
-}
-
-// Inputs Core Setup
-const keys = {};
-window.addEventListener('keydown', e => {
-    keys[e.code] = true;
-    if (e.code === 'Space' || e.code === 'Enter') {
-        if (!gameActive || gameOver) restartGame();
+let cars = [];
+function spawnCars() {
+    cars = [];
+    for (let i = 50; i < TRACK_LENGTH - 50; i += 28) {
+        cars.push({
+            z: i * SEGMENT_LENGTH,       
+            laneX: (Math.random() * 1.5) - 0.75,        
+            speed: maxSpeed * 0.45 + (Math.random() * maxSpeed * 0.35), 
+            color: `hsl(${Math.random() * 360}, 75%, 40%)`,
+            w: 460                                     
+        });
     }
-});
-window.addEventListener('keyup', e => keys[e.code] = false);
+}
 
-function restartGame() {
-    gameOver = false;
-    gameActive = true;
-    score = 0;
-    distance = 0;
-    speed = 0;
-    trackPosition = 0;
+// --- Projection Math Matrix Transformation ---
+function project(p, cameraX, cameraY, cameraZ) {
+    if (!canvas) return;
+    let transX = p.world.x - cameraX;
+    let transY = p.world.y - cameraY;
+    let transZ = p.world.z - cameraZ;
+
+    if (transZ <= 0) transZ = 1;
+    let scale = CAMERA_DEPTH / transZ;
+
+    p.screen.x = Math.round((canvas.width / 2) + (scale * transX * canvas.width / 2));
+    p.screen.y = Math.round((canvas.height / 2) - (scale * transY * canvas.height / 2));
+    p.screen.w = Math.round(scale * ROAD_WIDTH * canvas.width / 2);
+}
+
+function drawPolygon(x1, y1, w1, x2, y2, w2, color, fogDensity = 0) {
+    if (!ctx || color === 'transparent') return;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x1 - w1, y1);
+    ctx.lineTo(x2 - w2, y2);
+    ctx.lineTo(x2 + w2, y2);
+    ctx.lineTo(x1 + w1, y1);
+    ctx.closePath();
+    ctx.fill();
+
+    // Fog Depth Overlay
+    if (fogDensity > 0) {
+        ctx.fillStyle = `rgba(247, 158, 59, ${fogDensity})`; 
+        ctx.beginPath();
+        ctx.moveTo(x1 - w1, y1);
+        ctx.lineTo(x2 - w2, y2);
+        ctx.lineTo(x2 + w2, y2);
+        ctx.lineTo(x1 + w1, y1);
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false) {
+    if (!ctx) return;
+    if (width < 12) {
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(x - width / 2, y - height, width, height);
+        return;
+    }
+
+    let wheelW = width * 0.19;
+    let wheelH = height * 0.46;
+    let cabinW = width * 0.72;
+    let cabinH = height * 0.48;
+
+    ctx.fillStyle = "#111111";
+    ctx.fillRect(x - width / 2, y - wheelH, wheelW, wheelH); 
+    ctx.fillRect(x + width / 2 - wheelW, y - wheelH, wheelW, wheelH); 
+
+    ctx.fillStyle = "#181818";
+    ctx.fillRect(x - width / 2 - 2, y - height, width + 4, height * 0.14);
+
+    ctx.fillStyle = baseColor;
+    ctx.beginPath();
+    ctx.moveTo(x - width / 2, y - wheelH * 0.4);
+    ctx.lineTo(x - width / 2 + 3, y - height * 0.58);
+    ctx.lineTo(x - cabinW / 2, y - height * 0.58);
+    ctx.lineTo(x - cabinW * 0.38, y - height + 3);
+    ctx.lineTo(x + cabinW * 0.38, y - height + 3);
+    ctx.lineTo(x + cabinW / 2, y - height * 0.58);
+    ctx.lineTo(x + width / 2 - 3, y - height * 0.58);
+    ctx.lineTo(x + width / 2, y - wheelH * 0.4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#1a2430";
+    ctx.beginPath();
+    ctx.moveTo(x - cabinW * 0.38, y - height * 0.58);
+    ctx.lineTo(x - cabinW * 0.28, y - height + 6);
+    ctx.lineTo(x + cabinW * 0.28, y - height + 6);
+    ctx.lineTo(x + cabinW * 0.38, y - height * 0.58);
+    ctx.closePath();
+    ctx.fill();
+
+    if (isPlayer && (keys['ArrowDown'] || keys['s'] || keys['S'])) {
+        ctx.fillStyle = "#ff0000"; 
+    } else {
+        ctx.fillStyle = "#910000"; 
+    }
+    ctx.fillRect(x - width * 0.44, y - height * 0.5, width * 0.16, height * 0.11);
+    ctx.fillRect(x + width * 0.44 - (width * 0.16), y - height * 0.5, width * 0.16, height * 0.11);
+}
+
+function resetGame() {
     playerX = 0;
-    skyOffset = 0;
-    populateTraffic();
-    overlay.style.opacity = 0;
-    setTimeout(() => overlay.style.visibility = 'hidden', 300);
-}
-
-function triggerCrash() {
-    gameOver = true;
-    gameActive = false;
+    position = 0;
     speed = 0;
-    mainTitle.innerText = "CRASHED";
-    subTitle.innerText = "PRESS ENTER TO RACE AGAIN";
-    overlay.style.visibility = 'visible';
-    overlay.style.opacity = 1;
+    score = 0;
+    gameOver = false;
+    skyOffset = 0;
+    carBounceTimer = 0;
+    screenShakeX = 0;
+    screenShakeY = 0;
+    createTrack();
+    spawnCars();
 }
 
-// ========================================================
-// CORE RUNTIME ENGINE LOOP
-// ========================================================
-let lastFrameTime = performance.now();
+createTrack();
+spawnCars();
 
-function stepEngine() {
-    const now = performance.now();
-    const dt = Math.min((now - lastFrameTime) / 1000, 0.1); // Cap timestep lag jumps
-    lastFrameTime = now;
+// --- Main Engine Calculations Pipe ---
+function update(dt) {
+    if (gameOver) return;
 
-    const horizonY = canvas.height * horizonRatio;
+    const trackTotalLength = TRACK_LENGTH * SEGMENT_LENGTH;
+    position += speed * dt;
+    while (position >= trackTotalLength) position -= trackTotalLength; 
+    while (position < 0) position += trackTotalLength;
 
-    if (gameActive && !gameOver) {
-        // Driving Input Translations
-        if (keys['ArrowUp'] || keys['KeyW']) speed = Math.min(speed + 120 * dt, maxSpeed);
-        else if (keys['ArrowDown'] || keys['KeyS']) speed = Math.max(speed - 180 * dt, 0);
-        else speed = Math.max(speed - 45 * dt, 0);
+    let currentSegIndex = Math.floor(position / SEGMENT_LENGTH) % TRACK_LENGTH;
+    let currentSegment = segments[currentSegIndex];
+    
+    if (speedVal) speedVal.innerText = Math.round(speed / 100);
+    if (scoreVal) scoreVal.innerText = score;
 
-        // Responsive Anti-Slide Handling Matrix
-        if (speed > 0) {
-            const steerSpeed = 1.6 * dt * (speed / maxSpeed + 0.2);
-            if (keys['ArrowLeft'] || keys['KeyA']) playerX -= steerSpeed;
-            else if (keys['ArrowRight'] || keys['KeyD']) playerX += steerSpeed;
-            else {
-                // ACTIVE HANDLING FIX: Snap center vector to counter drifting
-                playerX -= playerX * 6.0 * dt; 
-                if (Math.abs(playerX) < 0.005) playerX = 0;
+    if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+        speed += accel;
+    } else if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+        speed += breaking;
+    } else {
+        speed += decel; 
+    }
+
+    let speedRatio = (speed / maxSpeed);
+    
+    // Dynamic Engine Vibrations
+    if (speedRatio > 0.4) {
+        carBounceTimer += dt * (speedRatio * 25);
+        screenShakeX = (Math.random() - 0.5) * (speedRatio * 2.5);
+        screenShakeY = (Math.random() - 0.5) * (speedRatio * 1.5);
+    } else {
+        carBounceTimer = 0;
+        screenShakeX = 0;
+        screenShakeY = 0;
+    }
+
+    if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+        playerX -= 0.042 * speedRatio;
+        if(speed > 0 && currentSegment) {
+            skyOffset += currentSegment.curve * 0.3 * speedRatio + 1.5;
+            screenShakeX += (Math.random() - 0.3) * 1.5; 
+        }
+    } else if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+        playerX += 0.042 * speedRatio;
+        if(speed > 0 && currentSegment) {
+            skyOffset += currentSegment.curve * 0.3 * speedRatio - 1.5;
+            screenShakeX -= (Math.random() - 0.3) * 1.5; 
+        }
+    } else {
+        if(speed > 0 && currentSegment && currentSegment.curve !== 0) {
+            skyOffset += currentSegment.curve * 0.6 * speedRatio;
+        }
+    }
+
+    if (currentSegment) {
+        playerX -= currentSegment.curve * 0.016 * speedRatio;
+    }
+
+    if (playerX < -0.9) playerX = -0.9;
+    if (playerX > 0.9) playerX = 0.9;
+
+    if (speed < 0) speed = 0;
+    if (speed > maxSpeed) speed = maxSpeed;
+
+    if (speed > 100) {
+        score += Math.floor(speed / 2500);
+    }
+
+    cars.forEach(car => {
+        car.z += car.speed * dt;
+        while (car.z >= trackTotalLength) car.z -= trackTotalLength;
+        while (car.z < 0) car.z += trackTotalLength;
+
+        let zDiff = Math.abs(position - car.z);
+        if (zDiff < 260 || zDiff > trackTotalLength - 260) {
+            let distanceX = Math.abs(playerX - car.laneX);
+            if (distanceX < 0.44) {
+                speed = 0;
+                gameOver = true;
             }
         }
+    });
+}
 
-        // Apply environment track curvature torque calculation
-        const currentSegIndex = Math.floor(trackPosition / segmentLength) % segments.length;
-        const currentSeg = segments[currentSegIndex];
-        playerX -= currentSeg.curve * 0.04 * dt * (speed / maxSpeed);
+// --- Graphics Paint Buffer Loop ---
+function render() {
+    if (!canvas || !ctx) return;
 
-        // Bind layout limits to asphalt edge markers
-        if (playerX < -1.6) playerX = -1.6;
-        if (playerX > 1.6) playerX = 1.6;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Advance pipeline displacement tracking maps
-        trackPosition += speed * 4.5 * dt;
-        if (trackPosition >= trackLength) trackPosition -= trackLength;
+    ctx.save();
+    ctx.translate(screenShakeX, screenShakeY);
 
-        distance += speed * dt * 0.08;
-        score = Math.floor(distance);
+    // 1. Synthwave Sky
+    let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height / 2);
+    skyGrad.addColorStop(0, "#130624"); 
+    skyGrad.addColorStop(0.4, "#521442"); 
+    skyGrad.addColorStop(0.75, "#b83925"); 
+    skyGrad.addColorStop(1, "#f79e3b"); 
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
 
-        skyOffset -= currentSeg.curve * 0.03 * (speed / maxSpeed);
+    // 2. Neon Sun & Parallax Ranges
+    let sunX = (canvas.width * 0.7) + (skyOffset * 0.1); 
+    ctx.fillStyle = "#ffcc00"; 
+    ctx.beginPath();
+    ctx.arc(sunX, canvas.height / 2 - 10, 50, 0, Math.PI * 2);
+    ctx.fill();
 
-        scoreVal.innerText = score;
-        speedVal.innerText = Math.floor(speed);
+    ctx.fillStyle = "#b83925";
+    ctx.fillRect(sunX - 55, canvas.height / 2 - 25, 110, 2);
+    ctx.fillRect(sunX - 55, canvas.height / 2 - 15, 110, 3);
+    ctx.fillRect(sunX - 55, canvas.height / 2 - 5, 110, 4);
+
+    ctx.fillStyle = "#2d0e28";
+    for (let m = -2; m < 6; m++) {
+        let mX = (m * 300) + (skyOffset % 300);
+        ctx.beginPath();
+        ctx.moveTo(mX, canvas.height / 2);
+        ctx.lineTo(mX + 150, canvas.height / 2 - 45);
+        ctx.lineTo(mX + 300, canvas.height / 2);
+        ctx.closePath();
+        ctx.fill();
     }
 
-    // ----------------------------------------------------
-    // RENDERING PIPELINE
-    // ----------------------------------------------------
-    ctx.fillStyle = '#05010d';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // 3. Landscape Base
+    ctx.fillStyle = "#0a260a"; 
+    ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
 
-    // Render Retro Synthwave Dual Layer Moving Sky Grid
-    let skyGradient = ctx.createLinearGradient(0, 0, 0, horizonY);
-    skyGradient.addColorStop(0, '#310066');
-    skyGradient.addColorStop(0.5, '#bd005a');
-    skyGradient.addColorStop(1, '#ff5500');
-    ctx.fillStyle = skyGradient;
-    ctx.fillRect(0, 0, canvas.width, horizonY);
+    const trackTotalLength = TRACK_LENGTH * SEGMENT_LENGTH;
+    let cameraHeight = 1500;
+    let startSegIndex = Math.floor(position / SEGMENT_LENGTH) % TRACK_LENGTH;
+    let baseSegment = segments[startSegIndex];
+    
+    if (!baseSegment) { ctx.restore(); return; }
 
-    // Neon Grid Stars Pattern
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    for (let s = 0; s < 40; s++) {
-        let starX = (Math.sin(s * 99) * canvas.width * 2 + skyOffset * 400) % canvas.width;
-        if (starX < 0) starX += canvas.width;
-        let starY = (Math.cos(s * 45) * 0.5 + 0.5) * (horizonY - 20);
-        ctx.fillRect(starX, starY, 2, 2);
-    }
+    let maxy = canvas.height;
+    let xOffset = 0;
+    let dx = -(baseSegment.curve * (position % SEGMENT_LENGTH / SEGMENT_LENGTH));
 
-    // Camera Constants Projection Definitions
-    const camHeight = 900;
-    const camDepth = 1 / Math.tan((80 / 2) * Math.PI / 180);
-    const startSegment = Math.floor(trackPosition / segmentLength);
-    const playerCamX = playerX * roadWidth;
+    let drawQueue = [];
+    let maxDrawSegments = 140;
 
-    let currentMaxY = canvas.height;
-    let segmentCurveSum = 0;
-    let segmentCurveDelta = 0;
+    // Loop 3A: Draw 3D Ground Mesh
+    for (let i = 0; i < maxDrawSegments; i++) {
+        let targetIndex = (startSegIndex + i) % TRACK_LENGTH;
+        let segment = segments[targetIndex];
+        if (!segment) continue;
+        
+        let loopZ = (targetIndex < startSegIndex) ? trackTotalLength : 0;
 
-    // Scan backwards from perspective limits (Horizon -> Screen Floor)
-    const renderHorizonDepth = 140;
-    const renderSegments = [];
+        project(segment.p1, playerX * (ROAD_WIDTH * 0.54) - xOffset, cameraHeight, position - loopZ);
+        project(segment.p2, playerX * (ROAD_WIDTH * 0.54) - xOffset - dx, cameraHeight, position - loopZ);
 
-    for (let n = 0; n < renderHorizonDepth; n++) {
-        let sIndex = (startSegment + n) % segments.length;
-        let seg = segments[sIndex];
-        let loopOffset = (sIndex < startSegment) ? trackLength : 0;
+        xOffset += dx;
+        dx += segment.curve;
 
-        segmentCurveDelta += seg.curve;
-        segmentCurveSum += segmentCurveDelta;
+        let p1 = segment.p1.screen;
+        let p2 = segment.p2.screen;
 
-        let p1 = project3D(segmentCurveSum - segmentCurveDelta, camHeight, seg.z1 + loopOffset, playerCamX, camHeight, trackPosition, camDepth, canvas.width, canvas.height);
-        let p2 = project3D(segmentCurveSum, camHeight, seg.z2 + loopOffset, playerCamX, camHeight, trackPosition, camDepth, canvas.width, canvas.height);
+        if (p1.y >= maxy || p2.y >= p1.y) continue;
+        maxy = p1.y;
 
-        if (!p1 || !p2 || p2.y >= p1.y || p1.y < horizonY) continue;
+        let fogDensity = Math.pow((i / maxDrawSegments), 2.5);
 
-        renderSegments[n] = { p1, p2, seg, n };
-    }
-
-    // Render background elements forward to preserve proper Z-layer stacking
-    for (let n = renderHorizonDepth - 1; n >= 0; n--) {
-        if (!renderSegments[n]) continue;
-        let { p1, p2, seg } = renderSegments[n];
-
-        if (p1.y >= currentMaxY) continue;
-
-        // Terrain Grass Grid Layers
-        ctx.fillStyle = seg.gridColor;
+        ctx.fillStyle = segment.color.grass;
+        ctx.fillRect(0, p2.y, canvas.width, p1.y - p2.y);
+        ctx.fillStyle = `rgba(247, 158, 59, ${fogDensity})`;
         ctx.fillRect(0, p2.y, canvas.width, p1.y - p2.y);
 
-        // Outer Shoulders Rumble Lines Matrix
-        ctx.fillStyle = seg.rumbleColor;
-        ctx.beginPath();
-        ctx.moveTo(p1.x - p1.w * 1.12, p1.y); ctx.lineTo(p2.x - p2.w * 1.12, p2.y);
-        ctx.lineTo(p2.x + p2.w * 1.12, p2.y); ctx.lineTo(p1.x + p1.w * 1.12, p1.y);
-        ctx.fill();
+        let rumble1 = p1.w * 0.11;
+        let rumble2 = p2.w * 0.11;
+        let laneW1 = p1.w * 0.02;
+        let laneW2 = p2.w * 0.02;
 
-        // Asphalt Track Highway Surface
-        ctx.fillStyle = seg.roadColor;
-        ctx.beginPath();
-        ctx.moveTo(p1.x - p1.w, p1.y); ctx.lineTo(p2.x - p2.w, p2.y);
-        ctx.lineTo(p2.x + p2.w, p2.y); ctx.lineTo(p1.x + p1.w, p1.y);
-        ctx.fill();
+        drawPolygon(p1.x, p1.y, p1.w + rumble1, p2.x, p2.y, p2.w + rumble2, segment.color.rumble, fogDensity);
+        drawPolygon(p1.x, p1.y, p1.w, p2.x, p2.y, p2.w, segment.color.road, fogDensity);
+        drawPolygon(p1.x, p1.y, laneW1, p2.x, p2.y, laneW2, segment.color.lane, fogDensity);
 
-        // White Center Dash Dividers Configuration
-        if (seg.index % 2 === 0) {
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.moveTo(p1.x - p1.w * 0.015, p1.y); ctx.lineTo(p2.x - p2.w * 0.015, p2.y);
-            ctx.lineTo(p2.x + p2.w * 0.015, p2.y); ctx.lineTo(p1.x + p1.w * 0.015, p1.y);
-            ctx.fill();
+        if (segment.sprite) {
+            drawQueue.push({
+                type: 'sprite',
+                spriteData: segment.sprite,
+                index: segment.index,
+                screenX: p1.x + (p1.w * segment.sprite.side),
+                screenY: p1.y,
+                scale: p1.w / ROAD_WIDTH
+            });
         }
     }
 
-    // ----------------------------------------------------
-    // TRAFFIC ASSET RENDER MAPS
-    // ----------------------------------------------------
-    traffic.forEach(car => {
-        car.currentZ = car.baseZ;
-        let relativeZ = car.currentZ - trackPosition;
-        if (relativeZ < -segmentLength) relativeZ += trackLength;
-        if (relativeZ > trackLength - segmentLength) relativeZ -= trackLength;
-
-        // Drive target algorithm movement updates
-        if (gameActive && !gameOver) {
-            car.baseZ += car.speed * 4.5 * dt;
-            if (car.baseZ >= trackLength) car.baseZ -= trackLength;
-        }
-
-        if (relativeZ <= 0 || relativeZ > renderHorizonDepth * segmentLength) return;
-
-        let carSegIndex = Math.floor(car.currentZ / segmentLength) % segments.length;
-        
-        // Calculate procedural curve accumulator matrix path displacement up to car location
-        let curveAccumulator = 0;
-        let deltaAccumulator = 0;
-        let stepsAhead = (carSegIndex - startSegment + segments.length) % segments.length;
-        
-        for (let k = 0; k < stepsAhead && k < renderHorizonDepth; k++) {
-            let idx = (startSegment + k) % segments.length;
-            deltaAccumulator += segments[idx].curve;
-            curveAccumulator += deltaAccumulator;
-        }
-
-        let scale = camDepth / relativeZ;
-        let carWorldX = curveAccumulator + (car.laneOffset * roadWidth);
-        let screenPos = project3D(carWorldX, camHeight, car.currentZ, playerCamX, camHeight, trackPosition, camDepth, canvas.width, canvas.height);
-
-        if (!screenPos || screenPos.y < horizonY) return;
-
-        let scaleW = screenPos.w * 0.24;
-        let scaleH = scaleW * 0.55;
-
-        // Core Collision Box Interceptor Vector
-        if (relativeZ < 140 && relativeZ > 20) {
-            let laneWidthMap = 0.45;
-            if (Math.abs(playerX - car.laneOffset) < laneWidthMap) {
-                triggerCrash();
+    // Loop 3B: Side Objects
+    for (let i = drawQueue.length - 1; i >= 0; i--) {
+        let item = drawQueue[i];
+        if (item.type === 'sprite') {
+            if (item.spriteData.type === 'tree') {
+                drawPalmTree(ctx, item.screenX, item.screenY, item.scale * 4.5);
+            } else if (item.spriteData.type === 'billboard') {
+                drawBillboard(ctx, item.screenX, item.screenY, item.scale * 4.0, item.index);
             }
         }
+    }
 
-        // Draw Approaching Enemy Vehicle Model
-        ctx.fillStyle = car.color;
-        ctx.fillRect(screenPos.x - scaleW / 2, screenPos.y - scaleH, scaleW, scaleH);
+    // Loop 3C: Traffic Car Engine Layers
+    for (let i = cars.length - 1; i >= 0; i--) {
+        let car = cars[i];
+        let relativeZ = car.z - position;
+        if (relativeZ < 0) relativeZ += trackTotalLength;
 
-        // Canopy Windows
-        ctx.fillStyle = '#06010f';
-        ctx.fillRect(screenPos.x - scaleW * 0.35, screenPos.y - scaleH + (scaleH * 0.1), scaleW * 0.7, scaleH * 0.35);
+        if (relativeZ > 0 && relativeZ < maxDrawSegments * SEGMENT_LENGTH) {
+            let carSegIndex = Math.floor(car.z / SEGMENT_LENGTH) % TRACK_LENGTH;
+            let seg = segments[carSegIndex];
+            if (!seg) continue;
 
-        // Glowing Taillights Matrix
-        ctx.fillStyle = '#ff0033';
-        ctx.fillRect(screenPos.x - scaleW * 0.45, screenPos.y - scaleH * 0.4, scaleW * 0.18, scaleH * 0.2);
-        ctx.fillRect(screenPos.x + scaleW * 0.27, screenPos.y - scaleH * 0.4, scaleW * 0.18, scaleH * 0.2);
-    });
+            let scale = CAMERA_DEPTH / relativeZ;
+            let carX = seg.p1.screen.x + (scale * (car.laneX - playerX) * (ROAD_WIDTH * 0.54) * canvas.width / 2);
+            let carY = seg.p1.screen.y;
+            let carW = scale * car.w * canvas.width / 2;
+            let carH = carW * 0.54;
 
-    // ----------------------------------------------------
-    // PLAYER ENGINE SPRITE DRAWING
-    // ----------------------------------------------------
-    const playerWidth = 125;
-    const playerHeight = 65;
-    const playerDrawX = canvas.width / 2;
-    const playerDrawY = canvas.height - 40;
+            let enemyBounce = Math.sin((car.z * 0.05)) * 0.8;
+            drawPseudo3DCar(carX, carY + enemyBounce, carW, carH, car.color, false);
+        }
+    }
 
-    // Outer Body Aero Chassis Styling
-    ctx.fillStyle = '#00ffff';
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = '#00ffff';
-    ctx.fillRect(playerDrawX - playerWidth / 2, playerDrawY - playerHeight, playerWidth, playerHeight);
-    ctx.shadowBlur = 0; // Reset canvas filter buffers
+    // 4. Primary Player Cockpit Vector Layer
+    let pCarW = 160;
+    let pCarH = 88;
+    let pCarX = canvas.width / 2;
+    
+    let pCarBounce = (speed > 0) ? Math.sin(carBounceTimer) * 1.4 : 0;
+    let pCarY = (canvas.height - 25) + pCarBounce;
+    
+    drawPseudo3DCar(pCarX, pCarY, pCarW, pCarH, "#00e5ff", true);
 
-    // Windshield frame
-    ctx.fillStyle = '#0a0314';
-    ctx.fillRect(playerDrawX - playerWidth * 0.34, playerDrawY - playerHeight + 10, playerWidth * 0.68, playerHeight * 0.38);
+    // 5. Game Over Prompt
+    if (gameOver) {
+        ctx.fillStyle = "rgba(12, 5, 24, 0.88)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#ff0066";
+        ctx.font = "bold 44px 'Courier New'";
+        ctx.textAlign = "center";
+        ctx.fillText("CRASHED!", canvas.width / 2, canvas.height / 2 - 20);
+        
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "18px 'Courier New'";
+        ctx.fillText(`FINAL SCORE: ${score} | Hit SPACEBAR to race again`, canvas.width / 2, canvas.height / 2 + 35);
+    }
 
-    // Active Performance Afterburner Lights Array
-    ctx.fillStyle = (speed > 0 && keys['ArrowDown']) ? '#ff0055' : '#770022';
-    if (speed > 0 && keys['ArrowDown']) ctx.shadowBlur = 10, ctx.shadowColor = '#ff0055';
-    ctx.fillRect(playerDrawX - playerWidth / 2 + 12, playerDrawY - 14, 26, 8);
-    ctx.fillRect(playerDrawX + playerWidth / 2 - 38, playerDrawY - 14, 26, 8);
-    ctx.shadowBlur = 0;
-
-    // Cyberpunk Wing Spoiler Assembly
-    ctx.fillStyle = '#310066';
-    ctx.fillRect(playerDrawX - playerWidth * 0.54, playerDrawY - playerHeight - 4, playerWidth * 1.08, 6);
-
-    requestAnimationFrame(stepEngine);
+    ctx.restore(); 
 }
 
-// Fire Up Engine Initial Run Sequence
-stepEngine();
+// --- Main Loop Tick ---
+let lastTime = performance.now();
+function gameLoop() {
+    try {
+        let now = performance.now();
+        let dt = Math.min(0.1, (now - lastTime) / 1000); 
+        lastTime = now;
+
+        update(dt);
+        render();
+    } catch (e) {
+        // Safe catch bypasses render halts completely
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
