@@ -6,7 +6,7 @@
 }
 
 body {
-    background-color: #111;
+    background-color: #0c0518;
     font-family: 'Courier New', Courier, monospace;
     display: flex;
     justify-content: center;
@@ -15,39 +15,73 @@ body {
     overflow: hidden;
 }
 
-#game-container {
+.arcade-cabinet {
     position: relative;
     width: 800px;
     height: 600px;
-    box-shadow: 0 0 40px rgba(0, 210, 255, 0.25);
-    border: 4px solid #333;
-    border-radius: 4px;
+    box-shadow: 0 0 50px rgba(0, 229, 255, 0.3);
+    border: 4px solid #ff0066;
+    border-radius: 8px;
     background: #000;
+    overflow: hidden;
 }
 
 canvas {
     display: block;
+    width: 100%;
+    height: 100%;
 }
 
-/* Retro HUD Layer overlaying the canvas */
-#ui-layer {
+.ui-bar {
     position: absolute;
     top: 20px;
     left: 20px;
     right: 20px;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
-    color: #00ff66;
-    font-size: 24px;
-    font-weight: bold;
-    text-shadow: 2px 2px #000;
-    pointer-events: none; /* Allows clicks to pass through to the canvas */
+    pointer-events: none;
 }
 
-.hud-box {
-    background: rgba(0, 0, 0, 0.75);
+.stat-box {
+    background: rgba(12, 5, 24, 0.85);
+    color: #00e5ff;
+    font-size: 20px;
+    font-weight: bold;
+    font-family: 'Courier New', Courier, monospace;
     padding: 10px 20px;
-    border-radius: 5px;
-    border: 2px solid #00ff66;
-    box-shadow: inset 0 0 10px rgba(0, 255, 102, 0.2);
+    border-radius: 4px;
+    border: 2px solid #00e5ff;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+    letter-spacing: 1px;
+}
+
+.controls-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(12, 5, 24, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 5;
+    color: #fff;
+    pointer-events: none;
+}
+
+#main-title {
+    color: #ff0066;
+    font-size: 48px;
+    margin-bottom: 10px;
+    letter-spacing: 4px;
+    text-shadow: 0 0 10px #ff0066;
+}
+
+#sub-title {
+    color: #00e5ff;
+    font-size: 16px;
+    letter-spacing: 1px;
 }
