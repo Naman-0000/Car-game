@@ -1,164 +1,294 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreVal = document.getElementById('score-val');
+const speedVal = document.getElementById('speed-val');
 
-// Engine Aspect Configuration
-canvas.width = 440;
-canvas.height = 620;
+canvas.width = 600;
+canvas.height = 450;
 
-// Game Operational States
+// Game Systems
 let gameOver = false;
 let score = 0;
-let speedModifier = 1;
+let distanceTraveled = 0;
+let speed = 0;
+const maxSpeed = 160;
 
-// Player Entity (Cyan Car)
+// Track Geometry Environment
+let trackPosition = 0;
+let curveMagnitude = 0;
+let currentCurve = 0;
+let targetCurve = 0;
+let curveTimer = 0;
+
+// Player Asset Design
 const player = {
-    x: 195,
-    y: 510,
-    width: 46,
-    height: 76,
-    speed: 6,
-    color: '#00ffff'
+    x: 0, // Relative centerview offset (-1 to 1)
+    y: 0,
+    width: 90,
+    height: 45
 };
 
-// Traffic Layer Configuration
-const trafficColors = ['#ff0066', '#ff3300', '#9d00ff', '#ff9900'];
-let trafficCars = [];
+// Traffic State Manager
+let traffic = [];
+const trafficColors = ['#ff0066', '#9d00ff', '#ff9900', '#ffff00'];
 
-function spawnTraffic() {
+function spawnVehicle() {
     if (gameOver) return;
-    
-    // 3 Distinct Lanes balanced for the canvas width
-    const lanes = [65, 195, 325];
-    const randomLane = lanes[Math.floor(Math.random() * lanes.length)];
-    
-    const tooClose = trafficCars.some(car => car.y < 160 && car.x === randomLane);
-    
-    if (!tooClose) {
-        trafficCars.push({
-            x: randomLane,
-            y: -90,
-            width: 46,
-            height: 76,
-            speed: (Math.random() * 2.5 + 3.5) * speedModifier,
-            color: trafficColors[Math.floor(Math.random() * trafficColors.length)]
+    if (traffic.length < 4 && Math.random() < 0.4) {
+        traffic.push({
+            lane: Math.floor(Math.random() * 3) - 1, // -1 (Left), 0 (Center), 1 (Right)
+            z: 2.0, // Distance on horizon pipeline
+            color: trafficColors[Math.floor(Math.random() * trafficColors.length)],
+            speed: 0.015 + (Math.random() * 0.01)
         });
     }
 }
+let trafficSpawner = setInterval(spawnVehicle, 1200);
 
-let spawnInterval = setInterval(spawnTraffic, 1400);
-
-// Key Interception Array
 const keys = {};
-window.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', e => {
     keys[e.code] = true;
-    if (gameOver && (e.code === 'Space' || e.code === 'Enter')) {
-        resetGame();
-    }
+    if (gameOver && (e.code === 'Space' || e.code === 'Enter')) resetGame();
 });
-
-window.addEventListener('keyup', (e) => {
-    keys[e.code] = false;
-});
-
-function checkCollision(rect1, rect2) {
-    const padding = 4; // Inside border padding for close-call forgiveness
-    return rect1.x + padding < rect2.x + rect2.width - padding &&
-           rect1.x + rect1.width - padding > rect2.x + padding &&
-           rect1.y + padding < rect2.y + rect2.height - padding &&
-           rect1.y + rect1.height - padding > rect2.y + padding;
-}
+window.addEventListener('keyup', e => keys[e.code] = false);
 
 function resetGame() {
     gameOver = false;
     score = 0;
-    speedModifier = 1;
-    player.x = 195;
-    player.y = 510;
-    trafficCars = [];
+    distanceTraveled = 0;
+    speed = 0;
+    trackPosition = 0;
+    curveMagnitude = 0;
+    currentCurve = 0;
+    player.x = 0;
+    traffic = [];
     if (scoreVal) scoreVal.innerText = score;
-    
-    clearInterval(spawnInterval);
-    spawnInterval = setInterval(spawnTraffic, 1400);
+    if (speedVal) speedVal.innerText = speed;
 }
 
-// Engine Core Pipeline Loop
 function gameLoop() {
-    // Background render layer
-    ctx.fillStyle = '#140226'; 
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Segmented highway striping
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 4;
-    ctx.setLineDash([25, 25]);
-    ctx.beginPath();
-    ctx.moveTo(146, 0); ctx.lineTo(146, canvas.height);
-    ctx.moveTo(292, 0); ctx.lineTo(292, canvas.height);
-    ctx.stroke();
-    ctx.setLineDash([]); 
-
+    // 1. UPDATE LOGIC ENGINE
     if (!gameOver) {
-        // Player translation vector calculation
-        if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
-        if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
-        if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
-        if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
+        // Driving Input Calculations
+        if (keys['ArrowUp'] || keys['KeyW']) {
+            speed = Math.min(speed + 1.5, maxSpeed);
+        } else {
+            speed = Math.max(speed - 2, 0);
+        }
+
+        if (speed > 0) {
+            if (keys['ArrowLeft'] || keys['KeyA']) player.x -= 0.04 * (speed / maxSpeed + 0.3);
+            if (keys['ArrowRight'] || keys['KeyD']) player.x += 0.04 * (speed / maxSpeed + 0.3);
+            
+            // Apply track curve force physics to drag player away
+            player.x -= currentCurve * 0.00015 * speed;
+        }
+
+        // Clip player limits inside boundary limits
+        if (player.x < -1.4) player.x = -1.4;
+        if (player.x > 1.4) player.x = 1.4;
+
+        // Dynamic Procedural Curve Adjustments
+        curveTimer -= 1;
+        if (curveTimer <= 0) {
+            targetCurve = (Math.random() * 2 - 1) * 4; 
+            curveTimer = 80 + Math.random() * 100;
+        }
+        currentCurve += (targetCurve - currentCurve) * 0.04;
+
+        distanceTraveled += speed * 0.05;
+        trackPosition += speed * 0.05;
         
-        // Boundaries restriction
-        if (player.x < 20) player.x = 20;
-        if (player.x > canvas.width - player.width - 20) player.x = canvas.width - player.width - 20;
-        if (player.y < 0) player.y = 0;
-        if (player.y > canvas.height - player.height) player.y = canvas.height - player.height;
+        score = Math.floor(distanceTraveled / 10);
+        if (scoreVal) scoreVal.innerText = score;
+        if (speedVal) speedVal.innerText = Math.floor(speed);
 
-        speedModifier = 1 + (score * 0.04);
+        // Process Traffic Array Pipeline
+        for (let i = traffic.length - 1; i >= 0; i--) {
+            let car = traffic[i];
+            // Approach perspective camera vector
+            car.z -= (speed / maxSpeed) * 0.03 - car.speed;
 
-        // Update traffic matrix arrays
-        for (let i = trafficCars.length - 1; i >= 0; i--) {
-            let car = trafficCars[i];
-            car.y += car.speed;
-            
-            ctx.fillStyle = car.color;
-            ctx.fillRect(car.x, car.y, car.width, car.height);
-            
-            if (checkCollision(player, car)) {
-                gameOver = true;
+            // Collision Vector Processing Threshold
+            if (car.z <= 0.15 && car.z > 0.05) {
+                const playerLane = player.x < -0.4 ? -1 : (player.x > 0.4 ? 1 : 0);
+                if (playerLane === car.lane) {
+                    gameOver = true;
+                    speed = 0;
+                }
             }
-            
-            if (car.y > canvas.height) {
-                trafficCars.splice(i, 1);
-                score += 1;
-                if (scoreVal) scoreVal.innerText = score;
+
+            // Recycle offscreen assets
+            if (car.z <= 0.02) {
+                traffic.splice(i, 1);
             }
         }
-    } else {
-        trafficCars.forEach(car => {
-            ctx.fillStyle = car.color;
-            ctx.fillRect(car.x, car.y, car.width, car.height);
-        });
     }
 
-    // Render active player asset
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // 2. GRAPHICS RENDERING PIPELINE
+    ctx.fillStyle = '#050010';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dynamic overlay for end states
+    // Render Synthwave Retro Sunset Horizon Layer
+    let horizonY = 160;
+    let gradient = ctx.createLinearGradient(0, 0, 0, horizonY);
+    gradient.addColorStop(0, '#7000ff');
+    gradient.addColorStop(0.4, '#ff0066');
+    gradient.addColorStop(0.7, '#ff6600');
+    gradient.addColorStop(1, '#ffcc00');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, horizonY);
+
+    // Sun rendering asset
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, horizonY, 55, Math.PI, 0, false);
+    let sunGrad = ctx.createLinearGradient(0, horizonY - 55, 0, horizonY);
+    sunGrad.addColorStop(0, '#ffff00');
+    sunGrad.addColorStop(1, '#ff0066');
+    ctx.fillStyle = sunGrad;
+    ctx.fill();
+
+    // Horizon Distant Mountains Rendering Outlines
+    ctx.fillStyle = '#14052b';
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    ctx.lineTo(120, horizonY - 25); ctx.lineTo(220, horizonY);
+    ctx.lineTo(380, horizonY - 35); ctx.lineTo(480, horizonY);
+    ctx.lineTo(600, horizonY - 15); ctx.lineTo(600, horizonY);
+    ctx.fill();
+
+    // 3D Perspective Pseudo Projection Grid Calculations
+    let scanlines = 28;
+    for (let i = 0; i < scanlines; i++) {
+        let perspectivePercent = i / scanlines;
+        let y = horizonY + (canvas.height - horizonY) * Math.pow(perspectivePercent, 2.2);
+        let nextY = horizonY + (canvas.height - horizonY) * Math.pow((i + 1) / scanlines, 2.2);
+        
+        let roadWidthPercent = 0.1 + 0.75 * Math.pow(perspectivePercent, 2);
+        let nextRoadWidthPercent = 0.1 + 0.75 * Math.pow((i + 1) / scanlines, 2);
+        
+        let curveOffset = Math.sin((y + trackPosition) * 0.004) * currentCurve * (1 - perspectivePercent);
+        let nextCurveOffset = Math.sin((nextY + trackPosition) * 0.004) * currentCurve * (1 - ((i + 1) / scanlines));
+
+        let centerX = canvas.width / 2 + curveOffset;
+        let nextCenterX = canvas.width / 2 + nextCurveOffset;
+
+        let w = canvas.width * roadWidthPercent;
+        let nextW = canvas.width * nextRoadWidthPercent;
+
+        // Render Ground Grass Segments (Alternating Synthwave Grid lines)
+        let groundColor = (Math.floor(y + trackPosition * 0.6) % 50 < 25) ? '#10002b' : '#1a003c';
+        ctx.fillStyle = groundColor;
+        ctx.fillRect(0, y, canvas.width, nextY - y);
+
+        // Main Highway Segment Processing
+        ctx.fillStyle = '#221838';
+        ctx.beginPath();
+        ctx.moveTo(centerX - w / 2, y);
+        ctx.lineTo(nextCenterX - nextW / 2, nextY);
+        ctx.lineTo(nextCenterX + nextW / 2, nextY);
+        ctx.lineTo(centerX + w / 2, y);
+        ctx.fill();
+
+        // Rumble Strips Edging Borders
+        let rumbleColor = (Math.floor(y + trackPosition * 0.9) % 40 < 20) ? '#ff0066' : '#ffffff';
+        ctx.fillStyle = rumbleColor;
+        let rW = w * 0.05;
+        let nextRW = nextW * 0.05;
+        
+        // Left rumble strip
+        ctx.beginPath();
+        ctx.moveTo(centerX - w / 2, y); ctx.lineTo(nextCenterX - nextW / 2, nextY);
+        ctx.lineTo(nextCenterX - nextW / 2 + nextRW, nextY); ctx.lineTo(centerX - w / 2 + rW, y);
+        ctx.fill();
+        // Right rumble strip
+        ctx.beginPath();
+        ctx.moveTo(centerX + w / 2, y); ctx.lineTo(nextCenterX + nextW / 2, nextY);
+        ctx.lineTo(nextCenterX + nextW / 2 - nextRW, nextY); ctx.lineTo(centerX + w / 2 - rW, y);
+        ctx.fill();
+
+        // White Center Dashboard Dividers
+        if (Math.floor(y + trackPosition * 1.2) % 60 < 30) {
+            ctx.fillStyle = '#ffffff';
+            let cW = w * 0.02;
+            let nextCW = nextW * 0.02;
+            ctx.beginPath();
+            ctx.moveTo(centerX - cW / 2, y); ctx.lineTo(nextCenterX - nextCW / 2, nextY);
+            ctx.lineTo(nextCenterX + nextCW / 2, nextY); ctx.lineTo(centerX + cW / 2, y);
+            ctx.fill();
+        }
+    }
+
+    // Render Approaching Traffic Matrix Elements
+    traffic.forEach(car => {
+        if (car.z <= 0.05 || car.z > 1.8) return;
+
+        // Calculate perspective placement maps
+        let rawP = (1.8 - car.z) / 1.8; 
+        let p = Math.pow(rawP, 2.5); 
+
+        let y = horizonY + (canvas.height - horizonY) * p;
+        let scale = 0.08 + 0.82 * Math.pow(p, 2);
+        
+        let curveOffset = Math.sin((y + trackPosition) * 0.004) * currentCurve * (1 - p);
+        let roadW = canvas.width * (0.1 + 0.75 * Math.pow(p, 2));
+        
+        // Dynamic position mapping inside target lanes
+        let laneOffset = (car.lane * roadW * 0.3);
+        let x = canvas.width / 2 + curveOffset + laneOffset;
+
+        let carW = 55 * scale;
+        let carH = 30 * scale;
+
+        // Base vehicle asset styling matrix
+        ctx.fillStyle = car.color;
+        ctx.fillRect(x - carW / 2, y - carH, carW, carH);
+        
+        // Taillights
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(x - carW / 2 + 2, y - carH + 2, carW * 0.2, carH * 0.2);
+        ctx.fillRect(x + carW / 2 - (carW * 0.2) - 2, y - carH + 2, carW * 0.2, carH * 0.2);
+    });
+
+    // Render Player Asset Spacecraft Car Setup
+    let pX = canvas.width / 2 + (player.x * (canvas.width * 0.28));
+    let pY = canvas.height - 30;
+
+    // Body chassis outline mapping
+    ctx.fillStyle = '#00ffff'; 
+    ctx.fillRect(pX - player.width / 2, pY - player.height, player.width, player.height);
+    
+    // Windshield frame
+    ctx.fillStyle = '#111122';
+    ctx.fillRect(pX - player.width * 0.35, pY - player.height + 5, player.width * 0.7, player.height * 0.4);
+    
+    // Brakelights asset processing
+    ctx.fillStyle = (speed > 0 && !(keys['ArrowUp'] || keys['KeyW'])) ? '#ff0033' : '#660011';
+    ctx.fillRect(pX - player.width / 2 + 5, pY - 12, 18, 6);
+    ctx.fillRect(pX + player.width / 2 - 23, pY - 12, 18, 6);
+    
+    // Spoiler layout wings
+    ctx.fillStyle = '#0088cc';
+    ctx.fillRect(pX - player.width * 0.55, pY - player.height - 4, player.width * 1.1, 5);
+
+    // Game Over Text Elements
     if (gameOver) {
-        ctx.fillStyle = 'rgba(15, 3, 31, 0.82)';
+        ctx.fillStyle = 'rgba(10, 2, 20, 0.85)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = '#ff0066'; 
-        ctx.font = 'bold 36px sans-serif';
+        ctx.fillStyle = '#ff0066';
+        ctx.font = 'bold 40px Courier New';
         ctx.textAlign = 'center';
-        ctx.fillText('CRASHED!', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText('CRASHED', canvas.width / 2, canvas.height / 2 - 20);
         
-        ctx.fillStyle = '#00ffff'; 
-        ctx.font = '16px sans-serif';
-        ctx.fillText('Press SPACEBAR or ENTER to try again', canvas.width / 2, canvas.height / 2 + 25);
-        ctx.textAlign = 'left'; 
+        ctx.fillStyle = '#00ffff';
+        ctx.font = '16px Courier New';
+        ctx.fillText('PRESS SPACEBAR TO RACE AGAIN', canvas.width / 2, canvas.height / 2 + 30);
+        ctx.textAlign = 'left';
     }
 
     requestAnimationFrame(gameLoop);
 }
 
+// Kick off initialization sequence
 gameLoop();
