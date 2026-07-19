@@ -4,8 +4,11 @@ const ctx = canvas ? canvas.getContext("2d") : null;
 const speedVal = document.getElementById("speed-val");
 const scoreVal = document.getElementById("score-val");
 
-if (canvas && (!canvas.width || canvas.width === 0)) canvas.width = 640;
-if (canvas && (!canvas.height || canvas.height === 0)) canvas.height = 480;
+// Force internal drawing resolution to perfectly match your 800x600 layout frame
+if (canvas) {
+    canvas.width = 800;
+    canvas.height = 600;
+}
 
 // --- Engine Configuration Settings ---
 const TRACK_LENGTH = 600;    
@@ -136,7 +139,7 @@ function spawnCars() {
     cars = [];
     for (let i = 50; i < TRACK_LENGTH - 50; i += 28) {
         cars.push({
-            z: i * SEGMENT_LENGTH,       
+            z: i * SEGMENT_LENGTH,        
             laneX: (Math.random() * 1.5) - 0.75,        
             speed: maxSpeed * 0.45 + (Math.random() * maxSpeed * 0.35), 
             color: `hsl(${Math.random() * 360}, 75%, 40%)`,
@@ -236,6 +239,9 @@ function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false) {
 }
 
 function resetGame() {
+    let overlay = document.getElementById("over-screen");
+    if (overlay) overlay.style.display = "none";
+
     playerX = 0;
     position = 0;
     speed = 0;
@@ -267,7 +273,10 @@ function update(dt) {
     if (speedVal) speedVal.innerText = Math.round(speed / 100);
     if (scoreVal) scoreVal.innerText = score;
 
-    if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+    if (keys['ArrowUp'] || keys['w'] || keys['W'] || keys[' ']) {
+        // Trigger start and hide splashscreen if player hits space/up to start racing
+        let overlay = document.getElementById("over-screen");
+        if (overlay && overlay.style.display !== "none") overlay.style.display = "none";
         speed += accel;
     } else if (keys['ArrowDown'] || keys['s'] || keys['S']) {
         speed += breaking;
