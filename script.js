@@ -1,17 +1,16 @@
-// --- Bulletproof Architecture Matrix ---
+  // --- Bulletproof Architecture Matrix ---
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas ? canvas.getContext("2d") : null;
 const speedVal = document.getElementById("speed-val");
 const scoreVal = document.getElementById("score-val");
 
-// Force internal drawing resolution to perfectly match your 800x600 layout frame
 if (canvas) {
     canvas.width = 800;
     canvas.height = 600;
 }
 
 // --- Engine Configuration Settings ---
-const TRACK_LENGTH = 600;    
+const TRACK_LENGTH = 800;    
 const SEGMENT_LENGTH = 200;  
 const RUMBLE_LENGTH = 3;     
 const ROAD_WIDTH = 2000;     
@@ -24,24 +23,23 @@ let speed = 0;
 const maxSpeed = 13500;      
 const accel = 220;           
 const breaking = -350;       
-const decel = -100;          
-let score = 0;
-let gameOver = false;
-let skyOffset = 0; 
 
-// Realism & Physics Modifiers
+// Realism Modifiers
 let carBounceTimer = 0;
 let screenShakeX = 0;
 let screenShakeY = 0;
+let chassisRoll = 0; // Simulated weight distribution lean
 
-// --- Input Interception Framework (Spam Protected) ---
+let skyOffset = 0; 
+let score = 0;
+let gameOver = false;
+
+// --- Input Interception Framework ---
 const keys = {};
 let resetCooldown = false; 
 
 window.addEventListener('keydown', e => { 
     keys[e.key] = true; 
-    
-    // Safety lock intercepts rapid Enter/Spacebar double-taps
     if (gameOver && (e.key === ' ' || e.key === 'Enter')) {
         if (!resetCooldown) {
             resetCooldown = true;
@@ -103,16 +101,29 @@ function drawBillboard(ctx, x, y, scale, index) {
     ctx.fillText((index % 2 === 0) ? "RACE" : "OUTRUN", x, y - postH - h/2 + 4);
 }
 
-// --- Procedural Generation Protocols ---
+// --- Procedural Generation Protocols (With 3D Elevation / Hills) ---
 let segments = [];
 function createTrack() {
     segments = [];
     for (let i = 0; i < TRACK_LENGTH; i++) {
         let curve = 0;
-        if (i > 40 && i < 110) curve = 2.2;
+        // Turn Segments
+        if (i > 40 && i < 110) curve = 2.4;
         if (i > 170 && i < 240) curve = -3.4;
-        if (i > 300 && i < 410) curve = 4.5;
-        if (i > 460 && i < 530) curve = -2.0;
+        if (i > 320 && i < 430) curve = 4.8;
+        if (i > 520 && i < 600) curve = -2.5;
+
+        // Elevation Geometry (Realism upgrade: Hills)
+        let worldY = 0;
+        if (i > 100 && i < 220) {
+            worldY = Math.sin(((i - 100) / 120) * Math.PI) * 1100; // Large sweeping hill
+        }
+        if (i > 380 && i < 500) {
+            worldY = Math.sin(((i - 380) / 120) * Math.PI) * -900; // Sudden dip/valley
+        }
+        if (i > 620 && i < 740) {
+            worldY = Math.sin(((i - 620) / 120) * Math.PI) * 1400; // Steep climb
+        }
 
         let sprite = null;
         if (i % 7 === 0) {
@@ -123,8 +134,8 @@ function createTrack() {
 
         segments.push({
             index: i,
-            p1: { world: { x: 0, y: 0, z: i * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
-            p2: { world: { x: 0, y: 0, z: (i + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+            p1: { world: { x: 0, y: worldY, z: i * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
+            p2: { world: { x: 0, y: worldY, z: (i + 1) * SEGMENT_LENGTH }, screen: { x: 0, y: 0, w: 0 } },
             curve: curve,
             sprite: sprite,
             color: Math.floor(i / RUMBLE_LENGTH) % 2 ? 
@@ -132,12 +143,17 @@ function createTrack() {
                 { road: '#242424', grass: '#0f3d0f', rumble: '#b81022', lane: 'transparent' }
         });
     }
+
+    // Connect segment heights smoothly across boundaries
+    for (let i = 1; i < TRACK_LENGTH; i++) {
+        segments[i].p1.world.y = segments[i-1].p2.world.y;
+    }
 }
 
 let cars = [];
 function spawnCars() {
     cars = [];
-    for (let i = 50; i < TRACK_LENGTH - 50; i += 28) {
+    for (let i = 50; i < TRACK_LENGTH - 50; i += 24) {
         cars.push({
             z: i * SEGMENT_LENGTH,        
             laneX: (Math.random() * 1.5) - 0.75,        
@@ -148,7 +164,7 @@ function spawnCars() {
     }
 }
 
-// --- Projection Math Matrix Transformation ---
+// --- Projection Math Matrix Transformation (Accounting for Pitch & Elevation) ---
 function project(p, cameraX, cameraY, cameraZ) {
     if (!canvas) return;
     let transX = p.world.x - cameraX;
@@ -174,7 +190,6 @@ function drawPolygon(x1, y1, w1, x2, y2, w2, color, fogDensity = 0) {
     ctx.closePath();
     ctx.fill();
 
-    // Fog Depth Overlay
     if (fogDensity > 0) {
         ctx.fillStyle = `rgba(247, 158, 59, ${fogDensity})`; 
         ctx.beginPath();
@@ -187,7 +202,7 @@ function drawPolygon(x1, y1, w1, x2, y2, w2, color, fogDensity = 0) {
     }
 }
 
-function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false) {
+function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false, rollLean = 0) {
     if (!ctx) return;
     if (width < 12) {
         ctx.fillStyle = baseColor;
@@ -195,47 +210,60 @@ function drawPseudo3DCar(x, y, width, height, baseColor, isPlayer = false) {
         return;
     }
 
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rollLean); // Lean frame during high-speed cornering shifts
+
     let wheelW = width * 0.19;
     let wheelH = height * 0.46;
     let cabinW = width * 0.72;
     let cabinH = height * 0.48;
 
+    // Rear tires
     ctx.fillStyle = "#111111";
-    ctx.fillRect(x - width / 2, y - wheelH, wheelW, wheelH); 
-    ctx.fillRect(x + width / 2 - wheelW, y - wheelH, wheelW, wheelH); 
+    ctx.fillRect(-width / 2, -wheelH, wheelW, wheelH); 
+    ctx.fillRect(width / 2 - wheelW, -wheelH, wheelW, wheelH); 
 
+    // Under-chassis shadow lip
     ctx.fillStyle = "#181818";
-    ctx.fillRect(x - width / 2 - 2, y - height, width + 4, height * 0.14);
+    ctx.fillRect(-width / 2 - 2, -height, width + 4, height * 0.14);
 
+    // Main bumper framing body
     ctx.fillStyle = baseColor;
     ctx.beginPath();
-    ctx.moveTo(x - width / 2, y - wheelH * 0.4);
-    ctx.lineTo(x - width / 2 + 3, y - height * 0.58);
-    ctx.lineTo(x - cabinW / 2, y - height * 0.58);
-    ctx.lineTo(x - cabinW * 0.38, y - height + 3);
-    ctx.lineTo(x + cabinW * 0.38, y - height + 3);
-    ctx.lineTo(x + cabinW / 2, y - height * 0.58);
-    ctx.lineTo(x + width / 2 - 3, y - height * 0.58);
-    ctx.lineTo(x + width / 2, y - wheelH * 0.4);
+    ctx.moveTo(-width / 2, -wheelH * 0.4);
+    ctx.lineTo(-width / 2 + 3, -height * 0.58);
+    ctx.lineTo(-cabinW / 2, -height * 0.58);
+    ctx.lineTo(-cabinW * 0.38, -height + 3);
+    ctx.lineTo(cabinW * 0.38, -height + 3);
+    ctx.lineTo(cabinW / 2, -height * 0.58);
+    ctx.lineTo(width / 2 - 3, -height * 0.58);
+    ctx.lineTo(width / 2, -wheelH * 0.4);
     ctx.closePath();
     ctx.fill();
 
+    // Windshield cockpit
     ctx.fillStyle = "#1a2430";
     ctx.beginPath();
-    ctx.moveTo(x - cabinW * 0.38, y - height * 0.58);
-    ctx.lineTo(x - cabinW * 0.28, y - height + 6);
-    ctx.lineTo(x + cabinW * 0.28, y - height + 6);
-    ctx.lineTo(x + cabinW * 0.38, y - height * 0.58);
+    ctx.moveTo(-cabinW * 0.38, -height * 0.58);
+    ctx.lineTo(-cabinW * 0.28, -height + 6);
+    ctx.lineTo(cabinW * 0.28, -height + 6);
+    ctx.lineTo(cabinW * 0.38, -height * 0.58);
     ctx.closePath();
     ctx.fill();
 
+    // Responsive Braking Tail lamps
     if (isPlayer && (keys['ArrowDown'] || keys['s'] || keys['S'])) {
-        ctx.fillStyle = "#ff0000"; 
+        ctx.fillStyle = "#ff1a1a"; 
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#ff0000";
     } else {
         ctx.fillStyle = "#910000"; 
     }
-    ctx.fillRect(x - width * 0.44, y - height * 0.5, width * 0.16, height * 0.11);
-    ctx.fillRect(x + width * 0.44 - (width * 0.16), y - height * 0.5, width * 0.16, height * 0.11);
+    ctx.fillRect(-width * 0.44, -height * 0.5, width * 0.16, height * 0.11);
+    ctx.fillRect(width * 0.44 - (width * 0.16), -height * 0.5, width * 0.16, height * 0.11);
+    
+    ctx.restore();
 }
 
 function resetGame() {
@@ -251,6 +279,7 @@ function resetGame() {
     carBounceTimer = 0;
     screenShakeX = 0;
     screenShakeY = 0;
+    chassisRoll = 0;
     createTrack();
     spawnCars();
 }
@@ -273,71 +302,84 @@ function update(dt) {
     if (speedVal) speedVal.innerText = Math.round(speed / 100);
     if (scoreVal) scoreVal.innerText = score;
 
+    // Realism Upgrade: Natural Exponential Drag Physics
+    let airResistance = -0.000012 * (speed * speed); 
+    let rollingFriction = -95;                      
+    speed += (airResistance + rollingFriction) * dt;
+
     if (keys['ArrowUp'] || keys['w'] || keys['W'] || keys[' ']) {
-        // Trigger start and hide splashscreen if player hits space/up to start racing
         let overlay = document.getElementById("over-screen");
         if (overlay && overlay.style.display !== "none") overlay.style.display = "none";
         speed += accel;
     } else if (keys['ArrowDown'] || keys['s'] || keys['S']) {
         speed += breaking;
-    } else {
-        speed += decel; 
     }
 
     let speedRatio = (speed / maxSpeed);
     
-    // Dynamic Engine Vibrations
-    if (speedRatio > 0.4) {
-        carBounceTimer += dt * (speedRatio * 25);
-        screenShakeX = (Math.random() - 0.5) * (speedRatio * 2.5);
-        screenShakeY = (Math.random() - 0.5) * (speedRatio * 1.5);
+    // Road vibration engine feedback
+    if (speedRatio > 0.1) {
+        carBounceTimer += dt * (speedRatio * 28);
+        screenShakeX = (Math.random() - 0.5) * (speedRatio * 2.2);
+        screenShakeY = (Math.random() - 0.5) * (speedRatio * 1.4);
     } else {
         carBounceTimer = 0;
         screenShakeX = 0;
         screenShakeY = 0;
     }
 
+    // Steering Handling Matrix
     if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
-        playerX -= 0.042 * speedRatio;
+        playerX -= 0.044 * speedRatio;
+        chassisRoll = Math.max(-0.05, chassisRoll - 0.2 * dt); // Chassis shifts weight right
         if(speed > 0 && currentSegment) {
-            skyOffset += currentSegment.curve * 0.3 * speedRatio + 1.5;
-            screenShakeX += (Math.random() - 0.3) * 1.5; 
+            skyOffset += currentSegment.curve * 0.3 * speedRatio + 1.6;
         }
     } else if (keys['ArrowRight'] || keys['d'] || keys['D']) {
-        playerX += 0.042 * speedRatio;
+        playerX += 0.044 * speedRatio;
+        chassisRoll = Math.min(0.05, chassisRoll + 0.2 * dt);  // Chassis shifts weight left
         if(speed > 0 && currentSegment) {
-            skyOffset += currentSegment.curve * 0.3 * speedRatio - 1.5;
-            screenShakeX -= (Math.random() - 0.3) * 1.5; 
+            skyOffset += currentSegment.curve * 0.3 * speedRatio - 1.6;
         }
     } else {
+        // Natural center snap alignment when hands off wheel
+        chassisRoll *= Math.pow(0.005, dt); 
         if(speed > 0 && currentSegment && currentSegment.curve !== 0) {
             skyOffset += currentSegment.curve * 0.6 * speedRatio;
         }
     }
 
-    if (currentSegment) {
-        playerX -= currentSegment.curve * 0.016 * speedRatio;
+    // Realism Upgrade: Centrifugal G-Force in Sharp Curves
+    if (currentSegment && speed > 0) {
+        // Pushes player outwards based on the curve magnitude multiplied by velocity intensity
+        playerX -= currentSegment.curve * 0.024 * speedRatio;
     }
 
-    if (playerX < -0.9) playerX = -0.9;
-    if (playerX > 0.9) playerX = 0.9;
+    if (playerX < -1.4 || playerX > 1.4) {
+        // Off-road terrain drag reduction simulation (grass friction)
+        if (speed > 2500) speed += breaking * 1.5 * dt;
+    }
 
+    // Clamp soft bounds
+    if (playerX < -1.85) playerX = -1.85;
+    if (playerX > 1.85) playerX = 1.85;
     if (speed < 0) speed = 0;
     if (speed > maxSpeed) speed = maxSpeed;
 
     if (speed > 100) {
-        score += Math.floor(speed / 2500);
+        score += Math.floor(speed / 2800);
     }
 
+    // Process Target Bots
     cars.forEach(car => {
         car.z += car.speed * dt;
         while (car.z >= trackTotalLength) car.z -= trackTotalLength;
         while (car.z < 0) car.z += trackTotalLength;
 
         let zDiff = Math.abs(position - car.z);
-        if (zDiff < 260 || zDiff > trackTotalLength - 260) {
+        if (zDiff < 280 || zDiff > trackTotalLength - 280) {
             let distanceX = Math.abs(playerX - car.laneX);
-            if (distanceX < 0.44) {
+            if (distanceX < 0.42) {
                 speed = 0;
                 gameOver = true;
             }
@@ -391,11 +433,14 @@ function render() {
     ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
 
     const trackTotalLength = TRACK_LENGTH * SEGMENT_LENGTH;
-    let cameraHeight = 1500;
+    
     let startSegIndex = Math.floor(position / SEGMENT_LENGTH) % TRACK_LENGTH;
     let baseSegment = segments[startSegIndex];
     
     if (!baseSegment) { ctx.restore(); return; }
+
+    // Realism adjustment: Camera tracks the elevation changes of the car smoothly
+    let cameraHeight = 1500 + baseSegment.p1.world.y; 
 
     let maxy = canvas.height;
     let xOffset = 0;
@@ -404,7 +449,7 @@ function render() {
     let drawQueue = [];
     let maxDrawSegments = 140;
 
-    // Loop 3A: Draw 3D Ground Mesh
+    // Loop 3A: Draw 3D Ground Mesh & Hills
     for (let i = 0; i < maxDrawSegments; i++) {
         let targetIndex = (startSegIndex + i) % TRACK_LENGTH;
         let segment = segments[targetIndex];
@@ -421,6 +466,7 @@ function render() {
         let p1 = segment.p1.screen;
         let p2 = segment.p2.screen;
 
+        // Clip segments behind the camera or occluded by closer cresting hills
         if (p1.y >= maxy || p2.y >= p1.y) continue;
         maxy = p1.y;
 
@@ -452,7 +498,7 @@ function render() {
         }
     }
 
-    // Loop 3B: Side Objects
+    // Loop 3B: Side Scenery Objects
     for (let i = drawQueue.length - 1; i >= 0; i--) {
         let item = drawQueue[i];
         if (item.type === 'sprite') {
@@ -464,7 +510,7 @@ function render() {
         }
     }
 
-    // Loop 3C: Traffic Car Engine Layers
+    // Loop 3C: Traffic Car Positioning (Calculates relative 3D hill offsets)
     for (let i = cars.length - 1; i >= 0; i--) {
         let car = cars[i];
         let relativeZ = car.z - position;
@@ -477,12 +523,14 @@ function render() {
 
             let scale = CAMERA_DEPTH / relativeZ;
             let carX = seg.p1.screen.x + (scale * (car.laneX - playerX) * (ROAD_WIDTH * 0.54) * canvas.width / 2);
-            let carY = seg.p1.screen.y;
+            
+            // Adjusts enemy height projection based on hill contours relative to player camera context
+            let carY = seg.p1.screen.y; 
             let carW = scale * car.w * canvas.width / 2;
             let carH = carW * 0.54;
 
             let enemyBounce = Math.sin((car.z * 0.05)) * 0.8;
-            drawPseudo3DCar(carX, carY + enemyBounce, carW, carH, car.color, false);
+            drawPseudo3DCar(carX, carY + enemyBounce, carW, carH, car.color, false, 0);
         }
     }
 
@@ -491,10 +539,12 @@ function render() {
     let pCarH = 88;
     let pCarX = canvas.width / 2;
     
+    // Suspension travel calculations
     let pCarBounce = (speed > 0) ? Math.sin(carBounceTimer) * 1.4 : 0;
     let pCarY = (canvas.height - 25) + pCarBounce;
     
-    drawPseudo3DCar(pCarX, pCarY, pCarW, pCarH, "#00e5ff", true);
+    // Pass chassisRoll variable to skew frame during severe swerving drops
+    drawPseudo3DCar(pCarX, pCarY, pCarW, pCarH, "#00e5ff", true, chassisRoll);
 
     // 5. Game Over Prompt
     if (gameOver) {
@@ -525,7 +575,7 @@ function gameLoop() {
         update(dt);
         render();
     } catch (e) {
-        // Safe catch bypasses render halts completely
+        // Safe catch container
     }
     requestAnimationFrame(gameLoop);
 }
